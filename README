@@ -1,0 +1,16 @@
+Questo progetto in Electron serve ad avviare un processo in background all'avvio del pc che serve a monitorare con una websocket lo stato di sensori binary e/o input booleani che all'attivarsi apriranno una pagina in modalità pip con una telecamera assegnata a quel sensore di home assistant in modo da poter vedere a colpo d'occhio cosa succede.
+
+Il progetto funzionerà con il token home assistant tramite ws
+Le impostazioni saranno salvate in modo sicuro
+Permetterà di scegliere in che posizione dello schermo verranno visualizzati gli eventi
+Se verrà mostrata 1 sola finestra o più finestre in colonna
+Se sarà attiva la modalità non disturbare non verranno avviati gli eventi
+Userà autocomplete per sensori e telecamere
+Le finestre pip saranno drag and drop
+avrà un tema chiaro e un tema scuro minimal nero e bianco
+Avrà una tryicon che permetterà di mettere non disturbare e uscire o mostrare la finestra principale
+L'evento avrà un timer come ad es 60 30 20 10 secondi che allo scadere si toglie o all passaggio off del sensore o di tutti i sensori associati
+se è di tipo timer al riscattare del evento si resetta il timer
+le dimensioni delle telecamere (finestra pip) saranno piccole medie grandi o personalizzati
+
+Sarà compilata in appImage exe deb rpm e forse anche in dmg per mac
