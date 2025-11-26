@@ -1,0 +1,326 @@
+/* Variabili CSS */
+:root {
+  /* Light theme */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e0e0e0;
+  --text-primary: #212121;
+  --text-secondary: #757575;
+  --accent: #2196f3;
+  --border: #e0e0e0;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --success: #4caf50;
+  --warning: #ff9800;
+  --error: #f44336;
+}
+
+[data-theme="dark"] {
+  /* Dark theme */
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --bg-tertiary: #2d2d2d;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --accent: #64b5f6;
+  --border: #333333;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --success: #66bb6a;
+  --warning: #ffb74d;
+  --error: #ef5350;
+}
+
+/* Stili base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow: hidden;
+  user-select: none;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Container PiP */
+.pip-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #000000; /* Sfondo nero opaco per rendering più rapido */
+  border-radius: 4px; /* Ridotto per performance */
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); /* Semplificato per performance */
+  /* backdrop-filter: blur(5px); Rimosso per migliorare performance */
+  will-change: transform; /* Ottimizzazione per GPU */
+  /* Ottimizzazioni per drag and drop fluido */
+  transform: translateZ(0); /* Forza accelerazione hardware */
+  backface-visibility: hidden; /* Previene flickering durante il movimento */
+  perspective: 1000px; /* Migliora le prestazioni di trasformazione */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Ottimizzazioni aggiuntive per drag fluido */
+  contain: layout style paint; /* Isola il rendering per migliorare performance */
+  isolation: isolate; /* Crea un nuovo stacking context per ottimizzare il rendering */
+  position: relative; /* Necessario per alcune ottimizzazioni del browser */
+  transition: transform 0.1s ease-out, box-shadow 0.2s ease; /* Transizioni fluide */
+}
+
+/* Stato durante il dragging */
+.pip-container.dragging {
+  transform: translateZ(0) scale(1.02); /* Leggero ingrandimento per feedback visivo */
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); /* Ombra più profonda durante il drag */
+  transition: none; /* Disabilita transizioni durante il drag per massima reattività */
+  z-index: 9999; /* Assicura che sia sopra tutto durante il drag */
+}
+
+/* Ottimizzazioni specifiche durante il drag */
+.pip-container.dragging .pip-video-container,
+.pip-container.dragging #pip-video,
+.pip-container.dragging #mjpeg-stream {
+  /* Riduci la qualità del rendering durante il drag per migliorare performance */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: pixelated;
+  will-change: auto; /* Resetta will-change durante il drag */
+}
+
+/* Header */
+.pip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.pip-header:active {
+}
+
+.pip-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.pip-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.pip-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pip-btn:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.pip-btn:active {
+  background-color: var(--border);
+}
+
+/* Video container */
+.pip-video-container {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background-color: #000;
+  /* Ottimizzazioni per rendering video durante il drag */
+  will-change: transform;
+  contain: layout style paint;
+  transform: translateZ(0);
+  /* Ottimizzazioni aggiuntive per fluidità */
+  isolation: isolate; /* Isola il rendering del video durante il drag */
+  position: relative;
+}
+
+#pip-video, #mjpeg-stream {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Ottimizzazioni per performance video */
+  will-change: transform;
+  contain: layout style paint;
+  image-rendering: -webkit-optimize-contrast;
+  /* Ottimizzazioni aggiuntive per drag fluido */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  /* Ottimizzazioni per rendering durante il movimento */
+  pointer-events: none; /* Previene interferenze con il drag */
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.pip-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #000;
+  color: #fff;
+  /* Ottimizzazioni per rendering più rapido */
+  contain: layout style paint;
+}
+
+.loading-image {
+  width: 60px; /* Ridotto per caricamento più rapido */
+  height: 60px;
+  margin-bottom: 8px;
+  /* Ottimizzazione per caricamento più rapido */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 8px;
+  display: none; /* Hidden in favor of the SVG image */
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-message {
+  text-align: center;
+  color: #f44336;
+}
+
+.error-message p {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+/* Timer */
+.pip-timer {
+  position: relative;
+  height: 4px;
+  background-color: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.timer-bar {
+  height: 100%;
+  background-color: var(--success);
+  transition: width 1s linear, background-color 0.3s ease;
+}
+
+.timer-text {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* Stili specifici per diverse dimensioni */
+@media (max-width: 240px) {
+  .pip-title {
+    display: none;
+  }
+
+  .timer-text {
+    display: none;
+  }
+}
+
+@media (max-height: 180px) {
+  .pip-timer {
+    height: 2px;
+  }
+}
+
+/* Animazioni */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.pip-container {
+  animation: fadeIn 0.3s ease;
+}
+
+/* Stili per il focus (accessibilità) */
+.pip-btn:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Stili per il tema scuro */
+[data-theme="dark"] .loading-spinner {
+  border-color: rgba(255, 255, 255, 0.1);
+  border-top-color: #fff;
+}
+
+[data-theme="dark"] .error-message {
+  color: #ef5350;
+}
+
+[data-theme="dark"] .timer-text {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Pulsante di chiusura fluttuante */
+.floating-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background-color: rgba(0, 0, 0, 0.7);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  z-index: 1000;
+}
+
+.floating-close-btn:hover {
+  background-color: rgba(244, 67, 54, 0.9);
+  transform: scale(1.1);
+}
+
+.floating-close-btn:active {
+  transform: scale(0.95);
+}

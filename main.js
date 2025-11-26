@@ -1,0 +1,261 @@
+const { app, BrowserWindow, Menu, powerMonitor } = require("electron");
+const path = require("path");
+
+// Importa i moduli
+const SettingsManager = require("./src/shared/settings-manager");
+const WebSocketManager = require("./src/main/websocket-manager");
+const PiPWindowManager = require("./src/main/pip-window-manager");
+const TrayManager = require("./src/main/tray-manager");
+const IPCHandlers = require("./src/main/ipc-handlers");
+const appConfig = require("./src/shared/app-config");
+
+// Variabili globali
+let mainWindow;
+let isQuitting = false;
+let settingsManager;
+let websocketManager;
+let pipWindowManager;
+let trayManager;
+let ipcHandlers;
+let isWebSocketConnected = false;
+let isSystemLocked = false;
+
+// Crea la finestra principale
+  function createMainWindow() {
+    mainWindow = new BrowserWindow({
+      width: appConfig.mainWindow.width,
+      height: appConfig.mainWindow.height,
+      minWidth: appConfig.mainWindow.minWidth,
+      icon: path.join(__dirname, appConfig.paths.iconPng),
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+      },
+
+      show: false,
+    });
+
+    mainWindow.loadFile(appConfig.paths.mainWindowHtml);
+
+    mainWindow.once("ready-to-show", () => {
+      // Controlla se Home Assistant è configurato
+      const settings = settingsManager.getSettings();
+      const hasHomeAssistantConfig = settings.homeAssistantUrl && settings.homeAssistantToken;
+
+      // Mostra la finestra solo se Home Assistant non è configurato
+      // Se è configurato, rimane in tray icon
+
+      if (hasHomeAssistantConfig) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+      }
+    });
+
+    mainWindow.on("close", (event) => {
+      if (!isQuitting) {
+        event.preventDefault();
+        mainWindow.hide();
+        // Assicurati che l'app non si chiuda quando la finestra viene nascosta
+        if (process.platform !== "darwin" && trayManager && trayManager.tray) {
+          // Su Windows/Linux, mantieni l'app in esecuzione se c'è la tray
+          return;
+        }
+      }
+    });
+
+    // Menu dell'app
+    const template = [
+      {
+        label: "File",
+        submenu: [
+          {
+            label: "Impostazioni",
+            accelerator: "CmdOrCtrl+,",
+            click: () => {
+              mainWindow.webContents.send("open-settings");
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Esci",
+            accelerator: "CmdOrCtrl+Q",
+            click: () => {
+              isQuitting = true;
+              app.quit();
+            },
+          },
+        ],
+      },
+      {
+        label: "Visualizza",
+        submenu: [{ role: "reload" }, { role: "toggleDevTools" }],
+      },
+    ];
+
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
+  }
+
+  // Inizializza i gestori
+  function initializeManagers() {
+    settingsManager = new SettingsManager(app);
+    settingsManager.initializeSettingsPath();
+    settingsManager.loadSettings();
+
+    websocketManager = new WebSocketManager(settingsManager);
+    pipWindowManager = new PiPWindowManager(settingsManager);
+    pipWindowManager.setWebSocketManager(websocketManager);
+    trayManager = new TrayManager(settingsManager);
+    // ipcHandlers verrà inizializzato dopo la creazione della finestra
+  }
+
+  // Configura i callback per gli eventi
+  function setupEventCallbacks() {
+    websocketManager.setEventCallbacks({
+      onSensorEvent: (eventData) => {
+        const dndMode = trayManager.getDndMode();
+        if (dndMode || isSystemLocked) {
+          return;
+        }
+        pipWindowManager.handleSensorEvent(eventData);
+      },
+      onConnectionStatusChange: (isConnected) => {
+        isWebSocketConnected = isConnected;
+        mainWindow.webContents.send("connection-status-changed", isConnected);
+      },
+    });
+
+    trayManager.setEventCallbacks({
+      onDndModeChange: (dndMode) => {
+        mainWindow.webContents.send("dnd-mode-changed", dndMode);
+      },
+      onQuit: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    });
+  }
+
+  // Eventi dell'applicazione
+  // Esegui il codice solo se abbiamo il lock dell'istanza singola
+  app.whenReady().then(() => {
+    try {
+      // Gestione istanza singola
+      gotTheLock = app.requestSingleInstanceLock();
+
+      if (!gotTheLock) {
+        // Se un'altra istanza è già in esecuzione, esci
+        app.quit();
+        return;
+      }
+
+      // Ascolta per eventi di seconda istanza
+      app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Qualcuno ha tentato di eseguire una seconda istanza, dovremmo focalizzare la nostra finestra
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          if (!mainWindow.isVisible()) mainWindow.show();
+          mainWindow.focus();
+        }
+      });
+      // Imposta l'icona dell'applicazione a livello globale
+
+      app.setAppUserModelId(appConfig.app.name);
+      if (process.platform !== "darwin") {
+        // Su Windows e Linux, imposta l'icona dell'applicazione
+        iconPath = path.join(__dirname, appConfig.paths.icon);
+        if (require("fs").existsSync(iconPath)) {
+          app.setAppUserModelId(appConfig.app.name);
+          if (process.platform === "win32") {
+            app.setAppUserModelId(appConfig.app.name);
+          }
+        }
+      }
+
+      // Inizializza prima i gestori per avere accesso alle impostazioni
+      initializeManagers();
+      createMainWindow();
+
+      // Imposta la finestra principale nel tray manager e negli ipc handlers
+      trayManager.setMainWindow(mainWindow);
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager);
+
+      setupEventCallbacks();
+
+      // Configura i gestori per gli eventi di blocco/sblocco del sistema
+      powerMonitor.on("lock-screen", () => {
+        isSystemLocked = true;
+        pipWindowManager.setSystemLocked(true);
+        console.log("Sistema bloccato - sospensione creazione finestre PiP");
+      });
+
+      powerMonitor.on("unlock-screen", () => {
+        isSystemLocked = false;
+        pipWindowManager.setSystemLocked(false);
+        console.log("Sistema sbloccato - ripresa creazione finestre PiP");
+      });
+
+      powerMonitor.on("suspend", () => {
+        isSystemLocked = true;
+        pipWindowManager.setSystemLocked(true);
+        console.log("Sistema in sospensione - sospensione creazione finestre PiP");
+      });
+
+      powerMonitor.on("resume", () => {
+        isSystemLocked = false;
+        pipWindowManager.setSystemLocked(false);
+        console.log("Sistema ripreso - ripresa creazione finestre PiP");
+      });
+
+      // Crea la tray prima di connettersi a WebSocket per evitare che l'app si chiuda
+      trayManager.createTray();
+      websocketManager.connectToHomeAssistant();
+    } catch (error) {
+      console.error("Errore durante l'inizializzazione dell'applicazione:", error);
+    }
+  });
+
+  // Questi eventi devono essere registrati solo se abbiamo il lock dell'istanza singola
+  app.on("window-all-closed", () => {
+    // On macOS, apps typically stay open even when all windows are closed
+    // On other platforms, only quit if we're not using the tray
+    if (process.platform !== "darwin" && (!trayManager || !trayManager.tray)) {
+      app.quit();
+    }
+  });
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createMainWindow();
+    }
+  });
+
+  app.on("before-quit", () => {
+    isQuitting = true;
+    try {
+      if (pipWindowManager) {
+        pipWindowManager.closeAllPiPWindows();
+      }
+      if (websocketManager) {
+        websocketManager.closeConnection();
+      }
+      if (trayManager) {
+        trayManager.destroy();
+      }
+    } catch (error) {
+      console.error("Errore durante la pulizia delle risorse:", error);
+    }
+  });
+
+  // Gestisci eccezioni non catturate
+  process.on("uncaughtException", (error) => {
+    console.error("Eccezione non catturata:", error);
+    if (websocketManager) {
+      websocketManager.closeConnection();
+    }
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    console.error("Rejection non gestita:", reason);
+  });

@@ -1,0 +1,568 @@
+const { ipcRenderer } = require("electron");
+
+// Importa i moduli
+const ThemeManager = require("./src/renderer/theme-manager");
+const MappingManager = require("./src/renderer/mapping-manager");
+const appConfig = require("./src/shared/app-config");
+
+// Stato dell'applicazione
+let appSettings = {};
+let homeAssistantDevices = { sensors: [], cameras: [] };
+
+// Gestori
+let themeManager;
+let mappingManager;
+
+// Elementi DOM
+const connectionStatus = document.getElementById("connection-status");
+const connectionText = document.getElementById("connection-text");
+const dndToggle = document.getElementById("dnd-toggle");
+const dndStatus = document.getElementById("dnd-status");
+
+// Inizializzazione
+document.addEventListener("DOMContentLoaded", async () => {
+  // Inizializza i gestori
+  themeManager = new ThemeManager();
+
+  // Carica le impostazioni
+  appSettings = await ipcRenderer.invoke("get-settings");
+
+  // Inizializza il gestore delle mappature dopo aver caricato i dispositivi
+  mappingManager = new MappingManager(appSettings, homeAssistantDevices);
+
+  // Imposta i valori iniziali
+  updateUIFromSettings();
+
+  // Carica i dispositivi Home Assistant se configurato
+  if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
+    await loadHomeAssistantDevices();
+    // Reinizializza il gestore delle mappature con i dispositivi caricati
+    mappingManager = new MappingManager(appSettings, homeAssistantDevices);
+  }
+
+  // Aggiorna lo stato dei sensori
+  updateSensorStatus();
+
+  // Imposta gli event listener rimanenti
+  setupEventListeners();
+});
+
+// Imposta gli event listener
+function setupEventListeners() {
+  // Event listener per il toggle DND
+  if (dndToggle) {
+    dndToggle.addEventListener("change", async () => {
+      const dndMode = dndToggle.checked;
+      if (dndStatus) {
+        dndStatus.textContent = dndMode ? "Attivato" : "Disattivato";
+      }
+      // Il processo principale gestirà l'aggiornamento dello stato DND
+    });
+  }
+
+  // Event listener per il cambio delle dimensioni predefinite
+  const defaultSizeSelect = document.getElementById("default-size");
+  if (defaultSizeSelect) {
+    defaultSizeSelect.addEventListener("change", () => {
+      toggleCustomSizeFields("default-size", "custom-size-container");
+    });
+  }
+
+  // Event listener per il cambio delle dimensioni di test
+  const testSizeSelect = document.getElementById("test-size");
+  if (testSizeSelect) {
+    testSizeSelect.addEventListener("change", () => {
+      toggleCustomSizeFields("test-size", "test-custom-size-container");
+    });
+  }
+
+  // Event listener per il cambio delle dimensioni di mappatura
+  const mappingSizeSelect = document.getElementById("mapping-size");
+  if (mappingSizeSelect) {
+    mappingSizeSelect.addEventListener("change", () => {
+      toggleCustomSizeFields("mapping-size", "mapping-custom-size-container");
+    });
+  }
+
+  // Event listener per il salvataggio delle impostazioni
+  const saveSettingsBtn = document.getElementById("save-settings-btn");
+  if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener("click", async () => {
+      await saveSettings();
+    });
+  }
+
+  // Event listener per il test di connessione
+  const testConnectionBtn = document.getElementById("test-connection-btn");
+  if (testConnectionBtn) {
+    testConnectionBtn.addEventListener("click", async () => {
+      await testConnection();
+    });
+  }
+
+  // Event listener per il test PiP
+  const testPipBtn = document.getElementById("test-pip-btn");
+  if (testPipBtn) {
+    testPipBtn.addEventListener("click", async () => {
+      await testPiP();
+    });
+  }
+
+  // Event listener per l'esportazione delle impostazioni
+  const exportSettingsBtn = document.getElementById("export-settings-btn");
+  if (exportSettingsBtn) {
+    exportSettingsBtn.addEventListener("click", async () => {
+      await exportSettings();
+    });
+  }
+
+  // Event listener per l'importazione delle impostazioni
+  const importSettingsBtn = document.getElementById("import-settings-btn");
+  if (importSettingsBtn) {
+    importSettingsBtn.addEventListener("click", async () => {
+      await importSettings();
+    });
+  }
+
+  // Event listener per il reset delle impostazioni
+  const resetSettingsBtn = document.getElementById("reset-settings-btn");
+  if (resetSettingsBtn) {
+    resetSettingsBtn.addEventListener("click", async () => {
+      await resetSettings();
+    });
+  }
+
+  // Funzione per mostrare/nascondere i campi personalizzati
+  function toggleCustomSizeFields(selectId, containerId) {
+    const select = document.getElementById(selectId);
+    const container = document.getElementById(containerId);
+    
+    if (select && container) {
+      if (select.value === "custom") {
+        container.style.display = "block";
+      } else {
+        container.style.display = "none";
+      }
+    }
+  }
+
+  // Gestione tab
+  const tabButtons = document.querySelectorAll(".tab-btn");
+  const tabPanes = document.querySelectorAll(".tab-pane");
+
+  tabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const tabName = button.getAttribute("data-tab");
+
+      // Rimuovi la classe active da tutti i tab e pulsanti
+      tabButtons.forEach((btn) => btn.classList.remove("active"));
+      tabPanes.forEach((pane) => pane.classList.remove("active"));
+
+      // Aggiungi la classe active al tab e pulsante corrente
+      button.classList.add("active");
+      document.getElementById(tabName).classList.add("active");
+    });
+  });
+}
+
+// Funzioni per le impostazioni
+function updateUIFromSettings() {
+  // Home Assistant settings
+  const haUrl = document.getElementById("ha-url");
+  if (haUrl) haUrl.value = appSettings.homeAssistantUrl || "";
+
+  const haToken = document.getElementById("ha-token");
+  if (haToken) haToken.value = appSettings.homeAssistantToken || "";
+
+  // PiP settings
+  const pipDuration = document.getElementById("pip-duration");
+  if (pipDuration) pipDuration.value = appSettings.pipSettings?.defaultDuration || 10;
+
+  const pipPosition = document.getElementById("pip-position");
+  if (pipPosition) pipPosition.value = appSettings.pipSettings?.position || "top-right";
+
+  const multiEventMode = document.getElementById("multi-event-mode");
+  if (multiEventMode) multiEventMode.value = appSettings.pipSettings?.multiEventMode || "cascade";
+
+  const defaultSize = document.getElementById("default-size");
+  if (defaultSize) defaultSize.value = appSettings.pipSettings?.size || "medium";
+
+  // Auto start
+  const autoStart = document.getElementById("auto-start");
+  if (autoStart) autoStart.checked = appSettings.autoStart || false;
+
+  // Update sensor mappings list
+  if (mappingManager) {
+    mappingManager.updateSensorMappingsList();
+  }
+}
+
+async function saveSettings() {
+  // Collect all settings
+  const newSettings = {
+    homeAssistantUrl: document.getElementById("ha-url")?.value || "",
+    homeAssistantToken: document.getElementById("ha-token")?.value || "",
+    autoStart: document.getElementById("auto-start")?.checked || false,
+    pipSettings: {
+      defaultDuration: parseInt(document.getElementById("pip-duration")?.value || 10),
+      position: document.getElementById("pip-position")?.value || "top-right",
+      multiEventMode: document.getElementById("multi-event-mode")?.value || "cascade",
+      size: document.getElementById("default-size")?.value || "medium",
+    },
+    sensorCameraMappings: appSettings.sensorCameraMappings || [],
+  };
+
+  try {
+    await ipcRenderer.invoke("save-settings", newSettings);
+    appSettings = newSettings;
+
+    // Show success message
+    showNotification("Impostazioni salvate con successo", "success");
+
+    // Reload devices if Home Assistant settings changed
+    if (newSettings.homeAssistantUrl && newSettings.homeAssistantToken) {
+      await loadHomeAssistantDevices();
+      // Reinizializza il gestore delle mappature con i dispositivi aggiornati
+      mappingManager = new MappingManager(appSettings, homeAssistantDevices);
+    }
+  } catch (error) {
+    showNotification("Errore nel salvataggio delle impostazioni: " + error.message, "error");
+  }
+}
+
+async function testConnection() {
+  const url = document.getElementById("ha-url")?.value;
+  const token = document.getElementById("ha-token")?.value;
+
+  if (!url || !token) {
+    showNotification("Inserisci URL e token di Home Assistant", "error");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${url}/api/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (response.ok) {
+      showNotification("Connessione a Home Assistant riuscita", "success");
+      updateConnectionStatus(true);
+    } else {
+      throw new Error("Credenziali non valide");
+    }
+  } catch (error) {
+    showNotification("Errore di connessione: " + error.message, "error");
+    updateConnectionStatus(false);
+  }
+}
+
+function updateConnectionStatus(isConnected) {
+  if (connectionStatus && connectionText) {
+    if (isConnected) {
+      connectionStatus.classList.remove("offline");
+      connectionStatus.classList.add("online");
+      connectionText.textContent = "Connesso";
+    } else {
+      connectionStatus.classList.remove("online");
+      connectionStatus.classList.add("offline");
+      connectionText.textContent = "Non connesso";
+    }
+  }
+}
+
+// Funzioni per i dispositivi Home Assistant
+async function loadHomeAssistantDevices() {
+  try {
+    const devices = await ipcRenderer.invoke("get-home-assistant-devices");
+
+    if (devices.error) {
+      showNotification("Errore nel caricamento dei dispositivi: " + devices.error, "error");
+      return;
+    }
+
+    homeAssistantDevices = devices;
+    updateDeviceSelects();
+    updateConnectionStatus(true);
+
+    // Aggiorna i dispositivi nel MappingManager
+    if (mappingManager) {
+      mappingManager.updateHomeAssistantDevices(homeAssistantDevices);
+    }
+  } catch (error) {
+    showNotification("Errore nel caricamento dei dispositivi: " + error.message, "error");
+    updateConnectionStatus(false);
+  }
+}
+
+function updateDeviceSelects() {
+  // Update sensor selects
+  const sensorSelect = document.getElementById("sensor-select");
+  const testCameraSelect = document.getElementById("test-camera");
+  const cameraSelect = document.getElementById("camera-select");
+
+  if (sensorSelect) {
+    // Clear existing options
+    sensorSelect.innerHTML = '<option value="">-- Seleziona un sensore --</option>';
+
+    // Add sensor options
+    homeAssistantDevices.sensors.forEach((sensor) => {
+      const option = document.createElement("option");
+      option.value = sensor.entity_id;
+      option.textContent = sensor.attributes.friendly_name || sensor.entity_id;
+      sensorSelect.appendChild(option);
+    });
+  }
+
+  if (testCameraSelect) {
+    testCameraSelect.innerHTML = '<option value="">-- Seleziona una telecamera --</option>';
+
+    // Add camera options to test select
+    homeAssistantDevices.cameras.forEach((camera) => {
+      const option = document.createElement("option");
+      option.value = camera.entity_id;
+      option.textContent = camera.attributes.friendly_name || camera.entity_id;
+      testCameraSelect.appendChild(option);
+    });
+  }
+
+  if (cameraSelect) {
+    cameraSelect.innerHTML = '<option value="">-- Seleziona una telecamera --</option>';
+
+    // Add camera options to mapping select
+    homeAssistantDevices.cameras.forEach((camera) => {
+      const option = document.createElement("option");
+      option.value = camera.entity_id;
+      option.textContent = camera.attributes.friendly_name || camera.entity_id;
+      cameraSelect.appendChild(option);
+    });
+  }
+}
+
+// Funzioni per lo stato dei sensori
+async function updateSensorStatus() {
+  try {
+    const sensorStatus = await ipcRenderer.invoke("get-sensor-status");
+    const statusList = document.getElementById("sensor-status-list");
+
+    if (!statusList) return;
+
+    if (!sensorStatus || sensorStatus.length === 0) {
+      statusList.innerHTML = "<p>Nessun sensore monitorato</p>";
+      return;
+    }
+
+    statusList.innerHTML = "";
+
+    sensorStatus.forEach((status) => {
+      const statusElement = document.createElement("div");
+      statusElement.className = "sensor-status-item";
+
+      const sensorName = getSensorName(status.sensorId);
+      const statusClass = status.status === "on" ? "on" : status.status === "off" ? "off" : "unknown";
+      const statusText = status.status === "on" ? "ON" : status.status === "off" ? "OFF" : "Sconosciuto";
+
+      statusElement.innerHTML = `
+        <span class="sensor-status-name">${sensorName}</span>
+        <span class="sensor-status-value ${statusClass}">${statusText}</span>
+      `;
+
+      statusList.appendChild(statusElement);
+    });
+  } catch (error) {
+    console.error("Errore nell'aggiornamento dello stato dei sensori:", error);
+  }
+}
+
+function getSensorName(sensorId) {
+  const sensor = homeAssistantDevices.sensors.find((s) => s.entity_id === sensorId);
+  return sensor ? sensor.attributes.friendly_name || sensor.entity_id : sensorId;
+}
+
+// Funzioni per il test
+async function testPiP() {
+  // Controlla se la modalità DND è attiva
+  if (dndToggle && dndToggle.checked) {
+    showNotification("Impossibile eseguire il test: modalità Non Disturbare attiva", "warning");
+    return;
+  }
+
+  const cameraId = document.getElementById("test-camera")?.value;
+  const cameraUrl = document.getElementById("test-camera-url")?.value;
+  const duration = parseInt(document.getElementById("test-duration")?.value || 5);
+  const sizeSelect = document.getElementById("test-size")?.value || "medium";
+
+  // Verifica che sia stato selezionato una camera o inserito un URL
+  if (!cameraId && !cameraUrl) {
+    showNotification("Seleziona una telecamera o inserisci un URL", "error");
+    return;
+  }
+
+  let cameraSettings = {
+    size: sizeSelect,
+  };
+
+  // Se è selezionata la dimensione personalizzata, aggiungi width e height
+  if (sizeSelect === "custom") {
+    const customWidth = parseInt(document.getElementById("test-custom-width")?.value || 320);
+    const customHeight = parseInt(document.getElementById("test-custom-height")?.value || 240);
+    
+    // Valida le dimensioni personalizzate
+    if (customWidth < 100 || customWidth > 1920 || customHeight < 100 || customHeight > 1080) {
+      showNotification("Dimensioni personalizzate non valide. Larghezza: 100-1920px, Altezza: 100-1080px", "error");
+      return;
+    }
+    
+    cameraSettings.width = customWidth;
+    cameraSettings.height = customHeight;
+  }
+
+  try {
+    // Passiamo sia l'URL (se presente) sia l'ID della camera e la durata
+    // Il processo principale gestirà la generazione dell'URL con token dinamico
+    await ipcRenderer.invoke("test-camera", cameraUrl, cameraSettings, cameraId, duration);
+    showNotification("Test PiP avviato", "success");
+  } catch (error) {
+    showNotification("Errore nell'avvio del test: " + error.message, "error");
+  }
+}
+
+// Funzioni di notifica
+function showNotification(message, type = "info") {
+  // Create notification element
+  const notification = document.createElement("div");
+  notification.className = `notification ${type}`;
+  notification.textContent = message;
+
+  // Style the notification
+  Object.assign(notification.style, {
+    position: "fixed",
+    top: "20px",
+    right: "20px",
+    padding: "12px 20px",
+    borderRadius: "4px",
+    color: "white",
+    fontWeight: "500",
+    zIndex: "9999",
+    opacity: "0",
+    transform: "translateY(-20px)",
+    transition: "all 0.3s ease",
+  });
+
+  // Set background color based on type
+  const colors = {
+    success: "#4caf50",
+    error: "#f44336",
+    warning: "#ff9800",
+    info: "#2196f3",
+  };
+
+  notification.style.backgroundColor = colors[type] || colors.info;
+
+  // Add to DOM
+  document.body.appendChild(notification);
+
+  // Animate in
+  setTimeout(() => {
+    notification.style.opacity = "1";
+    notification.style.transform = "translateY(0)";
+  }, 10);
+
+  // Remove after 3 seconds
+  setTimeout(() => {
+    notification.style.opacity = "0";
+    notification.style.transform = "translateY(-20px)";
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.parentNode.removeChild(notification);
+      }
+    }, 300);
+  }, 3000);
+}
+
+// Funzioni per la gestione delle impostazioni
+async function exportSettings() {
+  try {
+    const result = await ipcRenderer.invoke("export-settings");
+    if (result.success) {
+      showNotification(`Impostazioni esportate in: ${result.path}`, "success");
+    } else if (!result.canceled) {
+      showNotification(`Errore nell'esportazione: ${result.error}`, "error");
+    }
+  } catch (error) {
+    showNotification("Errore nell'esportazione delle impostazioni: " + error.message, "error");
+  }
+}
+
+async function importSettings() {
+  try {
+    const result = await ipcRenderer.invoke("import-settings");
+    if (result.success) {
+      appSettings = result.settings;
+      updateUIFromSettings();
+      showNotification("Impostazioni importate con successo", "success");
+
+      // Ricarica i dispositivi se Home Assistant è configurato
+      if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
+        await loadHomeAssistantDevices();
+        // Reinizializza il gestore delle mappature con i dispositivi aggiornati
+        mappingManager = new MappingManager(appSettings, homeAssistantDevices);
+      }
+    } else if (!result.canceled) {
+      showNotification(`Errore nell'importazione: ${result.error}`, "error");
+    }
+  } catch (error) {
+    showNotification("Errore nell'importazione delle impostazioni: " + error.message, "error");
+  }
+}
+
+async function resetSettings() {
+  if (confirm("Sei sicuro di voler resettare tutte le impostazioni ai valori predefiniti? Questa azione non può essere annullata.")) {
+    try {
+      const result = await ipcRenderer.invoke("reset-settings");
+      if (result.success) {
+        appSettings = result.settings;
+        updateUIFromSettings();
+        showNotification("Impostazioni resettate con successo", "success");
+
+        // Ricarica i dispositivi se Home Assistant è configurato
+        if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
+          await loadHomeAssistantDevices();
+          // Reinizializza il gestore delle mappature con i dispositivi aggiornati
+          mappingManager = new MappingManager(appSettings, homeAssistantDevices);
+        }
+      } else {
+        showNotification(`Errore nel reset: ${result.error}`, "error");
+      }
+    } catch (error) {
+      showNotification("Errore nel reset delle impostazioni: " + error.message, "error");
+    }
+  }
+}
+
+// IPC event listeners
+ipcRenderer.on("open-settings", () => {
+  // Switch to settings tab
+  const settingsTab = document.querySelector('[data-tab="settings"]');
+  if (settingsTab) {
+    settingsTab.click();
+  }
+});
+
+ipcRenderer.on("dnd-mode-changed", (event, dndMode) => {
+  if (dndToggle) {
+    dndToggle.checked = dndMode;
+  }
+  if (dndStatus) {
+    dndStatus.textContent = dndMode ? "Attivato" : "Disattivato";
+  }
+});
+
+ipcRenderer.on("connection-status-changed", (event, isConnected) => {
+  updateConnectionStatus(isConnected);
+});
+
+// Update sensor status periodically
+setInterval(updateSensorStatus, 5000);

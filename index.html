@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HA-Cam</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <header>
+        <div class="theme-toggle">
+          <button id="theme-toggle-btn" class="icon-btn">
+            <svg
+              id="theme-icon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+          <button class="tab-btn" data-tab="sensors">Sensori</button>
+          <button class="tab-btn" data-tab="settings">Impostazioni</button>
+          <button class="tab-btn" data-tab="test">Test</button>
+        </div>
+
+        <div class="tab-content">
+          <!-- Dashboard Tab -->
+          <div id="dashboard" class="tab-pane active">
+            <div class="status-card">
+              <h2>Stato Connessione</h2>
+              <div class="status-indicator">
+                <span id="connection-status" class="status-dot offline"></span>
+                <span id="connection-text">Non connesso</span>
+              </div>
+            </div>
+
+            <div class="status-card">
+              <h2>Modalità Non Disturbare</h2>
+              <div class="toggle-container">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="dnd-toggle" />
+                  <span class="slider"></span>
+                </label>
+                <span id="dnd-status">Disattivato</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sensori Tab -->
+          <div id="sensors" class="tab-pane">
+            <div class="card">
+              <h2>Configurazione Sensori-Telecamere</h2>
+              <div class="sensor-mappings">
+                <div id="sensor-list" class="sensor-list">
+                  <!-- Le mappature sensori-telecamere verranno aggiunte dinamicamente -->
+                </div>
+                <button id="add-mapping-btn" class="btn primary">Aggiungi Mappatura</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Stato Sensori</h2>
+              <div id="sensor-status-list" class="sensor-status-list">
+                <!-- Lo stato dei sensori verrà mostrato qui -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Impostazioni Tab -->
+          <div id="settings" class="tab-pane">
+            <div class="card">
+              <h2>Home Assistant</h2>
+              <div class="form-group">
+                <label for="ha-url">URL Home Assistant</label>
+                <input type="text" id="ha-url" placeholder="https://homeassistant.local:8123" />
+              </div>
+              <div class="form-group">
+                <label for="ha-token">Token di Accesso</label>
+                <input type="password" id="ha-token" placeholder="Token di accesso a Home Assistant" />
+              </div>
+              <button id="test-connection-btn" class="btn secondary">Test Connessione</button>
+            </div>
+
+            <div class="card">
+              <h2>Impostazioni PiP</h2>
+              <div class="form-group">
+                <label for="pip-duration">Durata predefinita (secondi)</label>
+                <input type="number" id="pip-duration" min="1" max="60" value="10" />
+              </div>
+              <div class="form-group">
+                <label for="pip-position">Posizione iniziale</label>
+                <select id="pip-position">
+                  <option value="top-right">In alto a destra</option>
+                  <option value="top-left">In alto a sinistra</option>
+                  <option value="bottom-right">In basso a destra</option>
+                  <option value="bottom-left">In basso a sinistra</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="multi-event-mode">Modalità multi-evento</label>
+                <select id="multi-event-mode">
+                  <option value="cascade">A cascata</option>
+                  <option value="replace">Sostituisci</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="default-size">Dimensione predefinita</label>
+                <select id="default-size">
+                  <option value="small">Piccolo</option>
+                  <option value="medium" selected>Medio</option>
+                  <option value="large">Grande</option>
+                  <option value="square">Quadrato</option>
+                  <option value="horizontal">Orizzontale</option>
+                  <option value="vertical">Verticale</option>
+                  <option value="custom">Personalizzata</option>
+                </select>
+              </div>
+              <div id="custom-size-container" class="form-group" style="display: none">
+                <label>Dimensioni personalizzate (px)</label>
+                <div class="custom-size-inputs">
+                  <div class="input-group">
+                    <label for="custom-width">Larghezza</label>
+                    <input type="number" id="custom-width" min="100" max="1920" value="320" />
+                  </div>
+                  <div class="input-group">
+                    <label for="custom-height">Altezza</label>
+                    <input type="number" id="custom-height" min="100" max="1080" value="240" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Avvio Automatico</h2>
+              <div class="toggle-container">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="auto-start" />
+                  <span class="slider"></span>
+                </label>
+                <span>Avvia automaticamente all'avvio del sistema</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Gestione Impostazioni</h2>
+              <div class="form-actions">
+                <button id="export-settings-btn" class="btn secondary">Esporta Impostazioni</button>
+                <button id="import-settings-btn" class="btn secondary">Importa Impostazioni</button>
+                <button id="reset-settings-btn" class="btn danger">Resetta Impostazioni</button>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button id="save-settings-btn" class="btn primary">Salva Impostazioni</button>
+            </div>
+          </div>
+
+          <!-- Test Tab -->
+          <div id="test" class="tab-pane">
+            <div class="card">
+              <h2>Test Telecamera</h2>
+              <div class="form-group">
+                <label for="test-camera">Seleziona Telecamera</label>
+                <select id="test-camera">
+                  <option value="">-- Seleziona una telecamera --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="test-camera-url">URL Telecamera (se non nella lista)</label>
+                <input type="text" id="test-camera-url" placeholder="URL diretto del flusso video" />
+              </div>
+              <div class="form-group">
+                <label for="test-duration">Durata (secondi)</label>
+                <input type="number" id="test-duration" min="1" max="30" value="60" />
+              </div>
+
+              <div class="form-group">
+                <label for="test-size">Dimensione</label>
+                <select id="test-size">
+                  <option value="small">Piccolo</option>
+                  <option value="medium" selected>Medio</option>
+                  <option value="large">Grande</option>
+                  <option value="square">Quadrato</option>
+                  <option value="horizontal">Orizzontale</option>
+                  <option value="vertical">Verticale</option>
+                  <option value="custom">Personalizzata</option>
+                </select>
+              </div>
+              <div id="test-custom-size-container" class="form-group" style="display: none">
+                <label>Dimensioni personalizzate (px)</label>
+                <div class="custom-size-inputs">
+                  <div class="input-group">
+                    <label for="test-custom-width">Larghezza</label>
+                    <input type="number" id="test-custom-width" min="100" max="1920" value="320" />
+                  </div>
+                  <div class="input-group">
+                    <label for="test-custom-height">Altezza</label>
+                    <input type="number" id="test-custom-height" min="100" max="1080" value="240" />
+                  </div>
+                </div>
+              </div>
+              <button id="test-pip-btn" class="btn primary">Avvia Test PiP</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modale per aggiungere mappatura sensore-telecamera -->
+    <div id="mapping-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Aggiungi Mappatura Sensore-Telecamera</h3>
+          <button class="close-btn" id="close-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="sensor-select">Sensore</label>
+            <select id="sensor-select">
+              <option value="">-- Seleziona un sensore --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="camera-select">Telecamera</label>
+            <select id="camera-select">
+              <option value="">-- Seleziona una telecamera --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="camera-url">URL Telecamera (se non nella lista)</label>
+            <input type="text" id="camera-url" placeholder="URL diretto del flusso video" />
+          </div>
+          <div class="form-group">
+            <label for="mapping-duration">Durata (secondi)</label>
+            <input type="number" id="mapping-duration" min="1" max="60" value="10" />
+          </div>
+
+          <div class="form-group">
+            <label for="mapping-size">Dimensione</label>
+            <select id="mapping-size">
+              <option value="small">Piccolo</option>
+              <option value="medium" selected>Medio</option>
+              <option value="large">Grande</option>
+              <option value="square">Quadrato</option>
+              <option value="horizontal">Orizzontale</option>
+              <option value="vertical">Verticale</option>
+              <option value="custom">Personalizzata</option>
+            </select>
+          </div>
+          <div id="mapping-custom-size-container" class="form-group" style="display: none">
+            <label>Dimensioni personalizzate (px)</label>
+            <div class="custom-size-inputs">
+              <div class="input-group">
+                <label for="mapping-custom-width">Larghezza</label>
+                <input type="number" id="mapping-custom-width" min="100" max="1920" value="320" />
+              </div>
+              <div class="input-group">
+                <label for="mapping-custom-height">Altezza</label>
+                <input type="number" id="mapping-custom-height" min="100" max="1080" value="240" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="save-mapping-btn" class="btn primary">Salva</button>
+          <button id="cancel-mapping-btn" class="btn secondary">Annulla</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "name": "ha-cam",
+  "version": "1.0.3",
+  "description": "Electron app for Home Assistant video monitoring with PiP mode",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-linux": "electron-builder --linux"
+  },
+  "keywords": [
+    "home-assistant",
+    "pip",
+    "video"
+  ],
+  "author": {
+    "name": "Carmine Pola",
+    "email": "carminepola@devmin.it"
+  },
+  "homepage": "https://github.com/carminepola/home-assistant-pip-monitor",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^29.1.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "it.devmin.ha-cam",
+    "productName": "Ha-cam",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility"
+    }
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}

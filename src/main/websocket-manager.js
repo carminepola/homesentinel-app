@@ -1,0 +1,303 @@
+const WebSocket = require("ws");
+const appConfig = require("../shared/app-config");
+
+class WebSocketManager {
+  constructor(settingsManager) {
+    this.settingsManager = settingsManager;
+    this.wsConnection = null;
+    this.isReconnecting = false;
+    this.reconnectTimeout = null;
+    this.heartbeatInterval = null;
+    this.sensorStates = new Map();
+    this.subscriptionIds = new Map();
+    this.subscriptionCounter = Date.now();
+
+    this.onSensorEvent = null;
+    this.onConnectionStatusChange = null;
+  }
+
+  setEventCallbacks(callbacks) {
+    this.onSensorEvent = callbacks.onSensorEvent;
+    this.onConnectionStatusChange = callbacks.onConnectionStatusChange;
+  }
+
+  connectToHomeAssistant() {
+    const settings = this.settingsManager.getSettings();
+
+    if (!settings.homeAssistantUrl || !settings.homeAssistantToken) {
+      console.log("Home Assistant non configurato");
+      return;
+    }
+
+    if (this.isReconnecting || (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN)) {
+      return;
+    }
+
+    const baseUrl = settings.homeAssistantUrl.replace(/\/$/, "");
+    const wsUrl = baseUrl.replace(/^http:/, "ws:").replace(/^https:/, "wss:") + "/api/websocket";
+
+    try {
+      if (this.wsConnection) {
+        this.wsConnection.close();
+      }
+
+      this.isReconnecting = true;
+      this.wsConnection = new WebSocket(wsUrl);
+
+      this.wsConnection.on("open", () => {
+        this.isReconnecting = false;
+        this.clearReconnectTimeout();
+        this.wsConnection.send(JSON.stringify({
+          type: "auth",
+          access_token: settings.homeAssistantToken,
+        }));
+      });
+
+      this.wsConnection.on("message", (data) => {
+        this.handleMessage(data);
+      });
+
+      this.wsConnection.on("close", (code) => {
+        this.handleConnectionClose(code);
+      });
+
+      this.wsConnection.on("error", (error) => {
+        console.error("Errore WebSocket:", error);
+        this.isReconnecting = false;
+      });
+    } catch (error) {
+      console.error("Errore di connessione:", error);
+      this.isReconnecting = false;
+    }
+  }
+
+  handleMessage(data) {
+    try {
+      const message = JSON.parse(data);
+
+      switch (message.type) {
+        case "auth_ok":
+          this.subscribeToStateChanges();
+          break;
+        case "event":
+          this.handleSensorEvent(message);
+          break;
+        case "auth_invalid":
+          console.error("Autenticazione fallita");
+          this.wsConnection.close();
+          break;
+        case "result":
+          this.handleResultMessage(message);
+          break;
+        case "pong":
+          // Pong received, connection is stable
+          break;
+      }
+    } catch (error) {
+      console.error("Errore nel parsing del messaggio:", error);
+    }
+  }
+
+  subscribeToStateChanges() {
+    const settings = this.settingsManager.getSettings();
+
+    if (settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0) {
+      setTimeout(() => {
+        const subscriptionId = this.getNextSubscriptionId();
+        const message = {
+          id: subscriptionId,
+          type: "subscribe_events",
+          event_type: "state_changed",
+        };
+
+        this.wsConnection.send(JSON.stringify(message));
+        this.subscriptionIds.set(subscriptionId, "state_changed");
+      }, 100);
+    }
+  }
+
+  handleResultMessage(message) {
+    if (message.success && this.subscriptionIds.has(message.id)) {
+      const subscriptionType = this.subscriptionIds.get(message.id);
+      if (subscriptionType === "state_changed") {
+        this.startHeartbeat();
+        if (this.onConnectionStatusChange) {
+          this.onConnectionStatusChange(true);
+        }
+      }
+    }
+  }
+
+  handleSensorEvent(message) {
+    const { event } = message;
+    if (!event || event.event_type !== "state_changed") {
+      return;
+    }
+
+    const { entity_id, old_state, new_state } = event.data;
+    if (!entity_id) {
+      return;
+    }
+
+    const settings = this.settingsManager.getSettings();
+    const mapping = settings.sensorCameraMappings.find((m) => m.sensorId === entity_id);
+    
+    if (!mapping) {
+      return;
+    }
+
+    const sensorState = new_state?.state || "unknown";
+    const previousState = old_state?.state || "unknown";
+    this.sensorStates.set(entity_id, sensorState);
+
+    if (this.onSensorEvent) {
+      this.onSensorEvent({
+        entity_id,
+        sensorState,
+        previousState,
+        mapping,
+      });
+    }
+  }
+
+  handleConnectionClose(code) {
+    this.subscriptionIds.clear();
+    this.stopHeartbeat();
+
+    if (this.onConnectionStatusChange) {
+      this.onConnectionStatusChange(false);
+    }
+
+    if (!this.isReconnecting) {
+      this.reconnectTimeout = setTimeout(() => {
+        this.isReconnecting = false;
+        this.connectToHomeAssistant();
+      }, appConfig.websocket.reconnectDelay);
+    }
+  }
+
+  startHeartbeat() {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
+        this.wsConnection.send(JSON.stringify({
+          id: this.getNextSubscriptionId(),
+          type: "ping"
+        }));
+      }
+    }, appConfig.websocket.heartbeatInterval);
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  clearReconnectTimeout() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+  }
+
+  updateSubscriptions() {
+    if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const settings = this.settingsManager.getSettings();
+    const hasMappings = settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0;
+    const isSubscribed = Array.from(this.subscriptionIds.values()).includes("state_changed");
+
+    if (hasMappings && !isSubscribed) {
+      const subscriptionId = this.getNextSubscriptionId();
+      const message = {
+        id: subscriptionId,
+        type: "subscribe_events",
+        event_type: "state_changed",
+      };
+
+      this.wsConnection.send(JSON.stringify(message));
+      this.subscriptionIds.set(subscriptionId, "state_changed");
+    } else if (!hasMappings && isSubscribed) {
+      const stateChangedSubscriptionId = Array.from(this.subscriptionIds.entries())
+        .find(([id, type]) => type === "state_changed")?.[0];
+      
+      if (stateChangedSubscriptionId) {
+        const message = {
+          id: this.getNextSubscriptionId(),
+          type: "unsubscribe_events",
+        };
+
+        this.wsConnection.send(JSON.stringify(message));
+        this.subscriptionIds.delete(stateChangedSubscriptionId);
+      }
+    }
+  }
+
+  getSensorStates() {
+    return this.sensorStates;
+  }
+
+  async getCameraUrlWithToken(cameraId, homeAssistantUrl, homeAssistantToken) {
+    if (!cameraId || !homeAssistantUrl || !homeAssistantToken) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${homeAssistantUrl}/api/states/${cameraId}`, {
+        headers: {
+          Authorization: `Bearer ${homeAssistantToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const cameraState = await response.json();
+
+      if (cameraState.attributes?.entity_picture) {
+        return `${homeAssistantUrl}${cameraState.attributes.entity_picture}`;
+      } else if (cameraState.attributes?.access_token) {
+        return `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${cameraState.attributes.access_token}`;
+      } else {
+        return `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${homeAssistantToken}`;
+      }
+    } catch (error) {
+      console.error(`Errore nell'ottenere l'URL della camera ${cameraId}:`, error);
+      return null;
+    }
+  }
+
+  closeConnection() {
+    this.clearReconnectTimeout();
+    this.stopHeartbeat();
+
+    if (this.wsConnection) {
+      try {
+        this.wsConnection.removeAllListeners();
+        if (this.wsConnection.readyState === WebSocket.OPEN || this.wsConnection.readyState === WebSocket.CONNECTING) {
+          this.wsConnection.close(1000, "Applicazione in chiusura");
+        }
+      } catch (error) {
+        console.error("Errore durante la chiusura della WebSocket:", error);
+      } finally {
+        this.wsConnection = null;
+      }
+    }
+
+    this.sensorStates.clear();
+    this.subscriptionIds.clear();
+    this.isReconnecting = false;
+  }
+
+  getNextSubscriptionId() {
+    return this.subscriptionCounter++;
+  }
+}
+
+module.exports = WebSocketManager;
