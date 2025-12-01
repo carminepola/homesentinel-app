@@ -1,6 +1,6 @@
 {
   "name": "ha-cam",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Electron app for Home Assistant video monitoring with PiP mode",
   "main": "main.js",
   "scripts": {
@@ -50,8 +50,8 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
+      
       ],
       "icon": "assets/icon.png",
       "category": "Utility"

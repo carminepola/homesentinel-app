@@ -72,7 +72,7 @@ class PiPWindowManager {
       pipWindow.loadFile(path.join(__dirname, "..", "..", "pip.html"));
 
       pipWindow.once("ready-to-show", () => {
-        pipWindow.show();
+        pipWindow.showInactive();
         this.windowCameraMap.set(pipWindow.id, cameraUrl);
         pipWindow.webContents.send("load-camera", {
           url: cameraUrl,
