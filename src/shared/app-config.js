@@ -43,6 +43,15 @@ const appConfig = {
     heartbeatInterval: 30000,
   },
 
+  // Configurazione streaming
+  streaming: {
+    // Intervallo di refresh per lo stream MJPEG (in millisecondi)
+    // 33 = 30fps, 1000 = 1fps, 2000 = 0.5fps
+    mjpegRefreshInterval: 33,
+    // Abilita il refresh automatico per gli stream MJPEG
+    enableMjpegRefresh: true,
+  },
+
   // Dimensioni predefinite per le finestre PiP
   pipSizes: {
     small: { width: 200, height: 150 },

@@ -78,6 +78,11 @@ class PiPWindowManager {
           url: cameraUrl,
           duration: duration || 10,
         });
+
+        // Invia il messaggio per l'animazione di apertura
+        setTimeout(() => {
+          pipWindow.webContents.send("window-open-anim");
+        }, 50);
       });
 
       pipWindow.on("closed", () => {
@@ -90,6 +95,9 @@ class PiPWindowManager {
         this.windowCameraIdMap.delete(pipWindow.id);
         this.windowPositionMap.delete(pipWindow.id);
         this.windowSettingsMap.delete(pipWindow.id);
+
+        // Riorganizza le finestre rimanenti
+        this.reorganizeWindows();
       });
 
       this.pipWindows.push(pipWindow);
@@ -188,14 +196,15 @@ class PiPWindowManager {
     windowsToClose.forEach((window) => {
       try {
         if (window && !window.isDestroyed()) {
-          window.removeAllListeners();
-          window.close();
+          // Invia il messaggio per l'animazione di chiusura
+          window.webContents.send("close-window-anim");
         }
       } catch (error) {
         console.error(`Errore nella chiusura della finestra PiP ${window?.id}:`, error);
       }
     });
 
+    // Pulisci le mappe immediatamente (le finestre verranno rimosse quando verrà chiamato l'evento closed)
     this.pipWindows = [];
     this.windowCameraMap.clear();
     this.windowCameraIdMap.clear();
@@ -205,9 +214,146 @@ class PiPWindowManager {
 
   closePiPWindow(windowId) {
     const window = this.pipWindows.find((w) => w.id === windowId);
-    if (window) {
-      window.close();
+    if (window && !window.isDestroyed()) {
+      // Invia il messaggio per l'animazione di chiusura
+      window.webContents.send("close-window-anim");
     }
+  }
+
+  animateWindowPosition(window, targetX, targetY, duration = 300) {
+    return new Promise((resolve) => {
+      if (!window || window.isDestroyed()) {
+        resolve();
+        return;
+      }
+
+      const bounds = window.getBounds();
+      const startX = bounds.x;
+      const startY = bounds.y;
+      const startTime = Date.now();
+      const frameRate = 60; // 60fps
+      const frameInterval = 1000 / frameRate; // ~16.67ms per frame
+
+      const animate = () => {
+        if (window.isDestroyed()) {
+          resolve();
+          return;
+        }
+
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Funzione di easing per un'animazione più fluida (ease-out-cubic)
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+        const currentX = Math.round(startX + (targetX - startX) * easeProgress);
+        const currentY = Math.round(startY + (targetY - startY) * easeProgress);
+
+        try {
+          window.setPosition(currentX, currentY, false);
+        } catch (error) {
+          console.error(`Errore nell'animazione della finestra ${window.id}:`, error);
+          resolve();
+          return;
+        }
+
+        if (progress < 1) {
+          setTimeout(animate, frameInterval);
+        } else {
+          resolve();
+        }
+      };
+
+      setTimeout(animate, frameInterval);
+    });
+  }
+
+  async reorganizeWindows() {
+    // Raggruppa le finestre per posizione
+    const windowsByPosition = {
+      "top-left": [],
+      "top-right": [],
+      "bottom-left": [],
+      "bottom-right": [],
+    };
+
+    // Popola i gruppi con le finestre attive
+    this.pipWindows.forEach((window) => {
+      if (window.isDestroyed()) return;
+
+      const position = this.windowPositionMap.get(window.id);
+      if (position && windowsByPosition[position]) {
+        windowsByPosition[position].push(window);
+      }
+    });
+
+    // Riorganizza le finestre per ogni posizione
+    const animationPromises = [];
+
+    Object.keys(windowsByPosition).forEach((position) => {
+      const windows = windowsByPosition[position];
+      if (windows.length === 0) return;
+
+      // Ordina le finestre per la loro posizione Y attuale
+      windows.sort((a, b) => {
+        const boundsA = a.getBounds();
+        const boundsB = b.getBounds();
+        return boundsA.y - boundsB.y;
+      });
+
+      // Ricalcola la posizione di ogni finestra
+      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+      const margin = appConfig.margin;
+
+      let currentY = position.includes("top") ? margin : screenHeight - margin;
+      const direction = position.includes("top") ? 1 : -1;
+
+      windows.forEach((window) => {
+        const settings = this.windowSettingsMap.get(window.id);
+        const size = this.getCameraSize(settings?.size, settings);
+        const { width: windowWidth, height: windowHeight } = size;
+
+        if (direction === -1) {
+          // Per posizioni bottom, inizia dal basso
+          currentY = screenHeight - windowHeight - margin;
+        }
+
+        // Calcola la posizione X
+        let x;
+        switch (position) {
+          case "top-left":
+            x = margin;
+            break;
+          case "top-right":
+            x = screenWidth - windowWidth - margin;
+            break;
+          case "bottom-left":
+            x = margin;
+            break;
+          case "bottom-right":
+          default:
+            x = screenWidth - windowWidth - margin;
+            break;
+        }
+
+        // Anima lo spostamento della finestra alla nuova posizione
+        const animationPromise = this.animateWindowPosition(window, x, currentY, 300);
+        animationPromises.push(animationPromise);
+
+        console.log(`Finestra ${window.id} in animazione verso (${Math.round(x)}, ${Math.round(currentY)})`);
+
+        // Aggiorna currentY per la prossima finestra
+        if (direction === 1) {
+          currentY += windowHeight + 15; // 15px di spazio tra le finestre
+        } else {
+          currentY -= windowHeight + 15;
+        }
+      });
+    });
+
+    // Attendi che tutte le animazioni siano completate
+    await Promise.all(animationPromises);
+    console.log("Tutte le animazioni delle finestre completate");
   }
 
   async handleSensorEvent(eventData) {

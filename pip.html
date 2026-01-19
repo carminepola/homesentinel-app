@@ -1,174 +1,186 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PiP Camera</title>
+    <link rel="stylesheet" href="pip-styles.css" />
+    <!-- Preload risorse critiche per caricamento più rapido -->
+    <link rel="preload" href="assets/loading.svg" as="image" />
+  </head>
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PiP Camera</title>
-  <link rel="stylesheet" href="pip-styles.css" />
-  <!-- Preload risorse critiche per caricamento più rapido -->
-  <link rel="preload" href="assets/loading.svg" as="image" />
-</head>
+  <body>
+    <div class="pip-container" id="pip-container">
+      <div class="pip-header" id="pip-header" style="display: none">
+        <div class="pip-title">Camera</div>
+        <div class="pip-controls">
+          <button id="close-btn" class="pip-btn" title="Chiudi">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
 
-<body>
-  <div class="pip-container" id="pip-container">
-    <div class="pip-header" id="pip-header" style="display: none">
-      <div class="pip-title">Camera</div>
-      <div class="pip-controls">
-        <button id="close-btn" class="pip-btn" title="Chiudi">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <div class="pip-video-container">
+        <video id="pip-video" autoplay muted playsinline style="display: none"></video>
+        <img id="mjpeg-stream" style="display: none; width: 100%; height: 100%; object-fit: cover" alt="Stream Camera" />
+        <div class="pip-loading" id="pip-loading">
+          <img src="assets/loading.svg" alt="Caricamento..." class="loading-image" />
+          <p>Caricamento...</p>
+        </div>
+
+        <!-- Pulsante di chiusura fluttuante -->
+        <button id="floating-close-btn" class="floating-close-btn" title="Chiudi">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
         </button>
       </div>
-    </div>
 
-    <div class="pip-video-container">
-      <video id="pip-video" autoplay muted playsinline style="display: none"></video>
-      <img id="mjpeg-stream" style="display: none; width: 100%; height: 100%; object-fit: cover" alt="Stream Camera" />
-      <div class="pip-loading" id="pip-loading">
-        <img src="assets/loading.svg" alt="Caricamento..." class="loading-image" />
-        <p>Caricamento...</p>
+      <div class="pip-timer">
+        <div class="timer-bar" id="timer-bar"></div>
+        <div class="timer-text" id="timer-text">10s</div>
       </div>
-
-      <!-- Pulsante di chiusura fluttuante -->
-      <button id="floating-close-btn" class="floating-close-btn" title="Chiudi">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
     </div>
 
-    <div class="pip-timer">
-      <div class="timer-bar" id="timer-bar"></div>
-      <div class="timer-text" id="timer-text">10s</div>
-    </div>
-  </div>
+    <script>
+      const { ipcRenderer } = require("electron");
 
-  <script>
-    const { ipcRenderer } = require("electron");
+      // Elementi DOM
+      const pipContainer = document.getElementById("pip-container");
+      const pipHeader = document.getElementById("pip-header");
+      const pipVideo = document.getElementById("pip-video");
+      const mjpegStream = document.getElementById("mjpeg-stream");
+      const pipLoading = document.getElementById("pip-loading");
 
-    // Elementi DOM
-    const pipContainer = document.getElementById("pip-container");
-    const pipHeader = document.getElementById("pip-header");
-    const pipVideo = document.getElementById("pip-video");
-    const mjpegStream = document.getElementById("mjpeg-stream");
-    const pipLoading = document.getElementById("pip-loading");
+      const muteIcon = document.getElementById("mute-icon");
+      const unmuteIcon = document.getElementById("unmute-icon");
+      const closeBtn = document.getElementById("close-btn");
+      const floatingCloseBtn = document.getElementById("floating-close-btn");
+      const timerBar = document.getElementById("timer-bar");
+      const timerText = document.getElementById("timer-text");
 
-    const muteIcon = document.getElementById("mute-icon");
-    const unmuteIcon = document.getElementById("unmute-icon");
-    const closeBtn = document.getElementById("close-btn");
-    const floatingCloseBtn = document.getElementById("floating-close-btn");
-    const timerBar = document.getElementById("timer-bar");
-    const timerText = document.getElementById("timer-text");
+      // Stato
+      let isMuted = true;
+      let timerInterval;
+      let remainingTime = 10;
+      let totalTime = 10;
+      let fallbackTimeout;
+      let mjpegRefreshInterval = null;
+      let mjpegRefreshTimer = null;
+      // Inizializzazione ottimizzata
+      document.addEventListener("DOMContentLoaded", () => {
+        // Setup immediato degli event listener critici
+        setupEventListeners();
 
-    // Stato
-    let isMuted = true;
-    let timerInterval;
-    let remainingTime = 10;
-    let totalTime = 10;
-    let fallbackTimeout;
-    // Inizializzazione ottimizzata
-    document.addEventListener("DOMContentLoaded", () => {
-      // Setup immediato degli event listener critici
-      setupEventListeners();
+        // Pre-imposta lo stato iniziale per riduire flicker
+        pipContainer.style.opacity = "1";
+        pipContainer.style.visibility = "visible";
+      });
 
-      // Pre-imposta lo stato iniziale per riduire flicker
-      pipContainer.style.opacity = "1";
-      pipContainer.style.visibility = "visible";
-    });
+      // IPC event listeners
+      ipcRenderer.on("load-camera", (event, config) => {
+        loadCamera(config);
+      });
 
-    // IPC event listeners
-    ipcRenderer.on("load-camera", (event, config) => {
-      loadCamera(config);
-    });
+      ipcRenderer.on("restart-timer", (event, config) => {
+        restartTimer(config.duration);
+      });
 
-    ipcRenderer.on("restart-timer", (event, config) => {
-      restartTimer(config.duration);
-    });
+      ipcRenderer.on("close-window-anim", () => {
+        animateWindowClose();
+      });
 
-    function loadCamera(config) {
-      console.log("Caricamento camera con config:", config);
-      const { url, duration } = config;
+      ipcRenderer.on("window-open-anim", () => {
+        animateWindowOpen();
+      });
 
-      // Verifica rapida dei dati
-      if (!url) {
-        console.error("URL video non fornito");
-        pipLoading.innerHTML = `
+      function loadCamera(config) {
+        console.log("Caricamento camera con config:", config);
+        const { url, duration } = config;
+
+        // Ferma qualsiasi refresh MJPEG esistente
+        stopMjpegRefresh();
+
+        // Verifica rapida dei dati
+        if (!url) {
+          console.error("URL video non fornito");
+          pipLoading.innerHTML = `
                     <div class="error-message">
                         <p>URL video non fornito</p>
                     </div>
                 `;
-        return;
+          return;
+        }
+
+        // Memorizza l'URL della camera per il tracciamento
+        window.cameraUrl = url;
+
+        // Imposta il tempo totale
+        totalTime = parseInt(duration) || 10;
+        remainingTime = totalTime;
+        updateTimerDisplay();
+        console.log(`Timer impostato a ${totalTime} secondi`);
+
+        // Nascondi entrambi gli elementi multimediali all'inizio
+        pipVideo.style.display = "none";
+        mjpegStream.style.display = "none";
+
+        // Rileva se è uno stream MJPEG di Home Assistant (controllo più veloce)
+        const isMjpegStream = url.includes("camera_proxy_stream") || url.includes("/api/camera_proxy_stream/");
+
+        console.log(`Tipo di stream rilevato: ${isMjpegStream ? "MJPEG" : "Video standard"}`);
+
+        // Carica il contenuto in modo asincrono per non bloccare l'UI
+        requestAnimationFrame(() => {
+          if (isMjpegStream) {
+            // Carica stream MJPEG
+            loadMjpegStream(url);
+          } else {
+            // Carica video standard
+            loadStandardVideo(url);
+          }
+        });
       }
 
-      // Memorizza l'URL della camera per il tracciamento
-      window.cameraUrl = url;
+      function loadMjpegStream(url) {
+        console.log(`Caricamento stream MJPEG da: ${url}`);
 
-      // Imposta il tempo totale
-      totalTime = parseInt(duration) || 10;
-      remainingTime = totalTime;
-      updateTimerDisplay();
-      console.log(`Timer impostato a ${totalTime} secondi`);
+        try {
+          // Nascondi il video e mostra lo stream MJPEG immediatamente
+          pipVideo.style.display = "none";
+          mjpegStream.style.display = "block";
 
-      // Nascondi entrambi gli elementi multimediali all'inizio
-      pipVideo.style.display = "none";
-      mjpegStream.style.display = "none";
+          // Imposta l'URL dello stream MJPEG con cache busting per evitare cache vecchie
+          const timestamp = Date.now();
+          mjpegStream.src = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`;
 
-      // Rileva se è uno stream MJPEG di Home Assistant (controllo più veloce)
-      const isMjpegStream = url.includes("camera_proxy_stream") || url.includes("/api/camera_proxy_stream/");
+          // Timeout più breve per il caricamento
+          const loadTimeout = setTimeout(() => {
+            if (pipLoading.style.display !== "none") {
+              console.warn("Timeout caricamento MJPEG, mostro comunque");
+              pipLoading.style.display = "none";
+              startTimer();
+              startMjpegRefresh(url);
+            }
+          }, 3000);
 
-      console.log(`Tipo di stream rilevato: ${isMjpegStream ? "MJPEG" : "Video standard"}`);
-
-      // Carica il contenuto in modo asincrono per non bloccare l'UI
-      requestAnimationFrame(() => {
-        if (isMjpegStream) {
-          // Carica stream MJPEG
-          loadMjpegStream(url);
-        } else {
-          // Carica video standard
-          loadStandardVideo(url);
-        }
-      });
-    }
-
-    function loadMjpegStream(url) {
-      console.log(`Caricamento stream MJPEG da: ${url}`);
-
-      try {
-        // Nascondi il video e mostra lo stream MJPEG immediatamente
-        pipVideo.style.display = "none";
-        mjpegStream.style.display = "block";
-
-        // Imposta l'URL dello stream MJPEG con cache busting per evitare cache vecchie
-        const timestamp = Date.now();
-        mjpegStream.src = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`;
-
-        // Timeout più breve per il caricamento
-        const loadTimeout = setTimeout(() => {
-          if (pipLoading.style.display !== "none") {
-            console.warn("Timeout caricamento MJPEG, mostro comunque");
+          // Gestione eventi per l'immagine MJPEG
+          mjpegStream.onload = () => {
+            clearTimeout(loadTimeout);
+            console.log("Stream MJPEG caricato con successo");
             pipLoading.style.display = "none";
             startTimer();
-          }
-        }, 3000);
+            startMjpegRefresh(url);
+          };
 
-        // Gestione eventi per l'immagine MJPEG
-        mjpegStream.onload = () => {
-          clearTimeout(loadTimeout);
-          console.log("Stream MJPEG caricato con successo");
-          pipLoading.style.display = "none";
-          startTimer();
-        };
-
-        mjpegStream.onerror = (e) => {
-          clearTimeout(loadTimeout);
-          console.error("Errore nel caricamento dello stream MJPEG:", e);
-          pipLoading.innerHTML = `
+          mjpegStream.onerror = (e) => {
+            clearTimeout(loadTimeout);
+            console.error("Errore nel caricamento dello stream MJPEG:", e);
+            pipLoading.innerHTML = `
               <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
               <div class="error-message">
                 <p>Errore nel caricamento dello stream MJPEG</p>
@@ -176,92 +188,132 @@
                 <small>URL: ${url.substring(0, 50)}${url.length > 50 ? "..." : ""}</small>
               </div>
             `;
-        };
-      } catch (error) {
-        console.error("Errore nell'inizializzazione dello stream MJPEG:", error);
-        pipLoading.innerHTML = `
+          };
+        } catch (error) {
+          console.error("Errore nell'inizializzazione dello stream MJPEG:", error);
+          pipLoading.innerHTML = `
             <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
             <div class="error-message">
               <p>Errore nell'inizializzazione dello stream MJPEG</p>
               <p>${error.message}</p>
             </div>
           `;
+        }
       }
-    }
 
-    function loadStandardVideo(url) {
-      console.log(`Caricamento video standard da: ${url}`);
+      function startMjpegRefresh(url) {
+        // Ferma qualsiasi timer di refresh esistente
+        stopMjpegRefresh();
 
-      // Audio non supportato, sempre muto
-      isMuted = true;
-      pipVideo.muted = isMuted;
-      updateMuteButton();
-      console.log(`Audio non supportato, video impostato come muto`);
+        // Configurazione del refresh (può essere personalizzata)
+        // 33ms = 30fps, 1000ms = 1fps, 2000ms = 0.5fps
+        const refreshInterval = 33; // 30fps (33ms per frame)
 
-      try {
-        // Mostra immediatamente il container del video per ridurre il percepito di attesa
-        pipVideo.style.display = "block";
+        console.log(`Avvio refresh MJPEG ogni ${refreshInterval}ms`);
 
-        // Resetta il video precedente in modo più efficiente
-        if (pipVideo.src !== url) {
-          pipVideo.pause();
-          pipVideo.currentTime = 0;
+        // Avvia il timer di refresh periodico
+        mjpegRefreshTimer = setInterval(() => {
+          refreshMjpegStream(url);
+        }, refreshInterval);
+      }
+
+      function refreshMjpegStream(url) {
+        if (!mjpegStream || mjpegStream.style.display === "none") {
+          // Non refreshare se lo stream non è visibile
+          return;
         }
 
-        // Imposta attributi per migliorare la compatibilità con streaming
-        pipVideo.crossOrigin = "anonymous";
-        pipVideo.playsInline = true;
+        // Aggiorna l'URL con un nuovo timestamp per forzare il refresh
+        const timestamp = Date.now();
+        const newSrc = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`;
+
+        // Usa requestAnimationFrame per evitare flicker
+        requestAnimationFrame(() => {
+          mjpegStream.src = newSrc;
+        });
+      }
+
+      function stopMjpegRefresh() {
+        if (mjpegRefreshTimer) {
+          clearInterval(mjpegRefreshTimer);
+          mjpegRefreshTimer = null;
+          console.log("Refresh MJPEG fermato");
+        }
+      }
+
+      function loadStandardVideo(url) {
+        console.log(`Caricamento video standard da: ${url}`);
+
+        // Audio non supportato, sempre muto
+        isMuted = true;
         pipVideo.muted = isMuted;
-        pipVideo.preload = "auto"; // Preload immediato per caricamento più rapido
+        updateMuteButton();
+        console.log(`Audio non supportato, video impostato come muto`);
 
-        // Carica il nuovo URL
-        pipVideo.src = url;
-
-        // Timeout più breve per il caricamento video
-        const loadTimeout = setTimeout(() => {
-          if (pipLoading.style.display !== "none") {
-            console.warn("Timeout caricamento video, mostro comunque");
-            pipLoading.style.display = "none";
-            startTimer();
-          }
-        }, 4000);
-
-        // Gestione eventi video migliorata
-        const handleLoadedData = () => {
-          clearTimeout(loadTimeout);
-          console.log("Video caricato con successo");
-          pipLoading.style.display = "none";
+        try {
+          // Mostra immediatamente il container del video per ridurre il percepito di attesa
           pipVideo.style.display = "block";
-          startTimer();
-          // Rimuovi l'event listener per evitare duplicazioni
-          pipVideo.removeEventListener("loadeddata", handleLoadedData);
-          pipVideo.removeEventListener("error", handleError);
-        };
 
-        const handleError = (e) => {
-          clearTimeout(loadTimeout);
-          console.error("Errore nel caricamento del video:", e);
-          let errorMessage = "Errore nel caricamento del video";
-
-          // Fornisci messaggi di errore più specifici
-          if (pipVideo.error) {
-            switch (pipVideo.error.code) {
-              case pipVideo.error.MEDIA_ERR_ABORTED:
-                errorMessage = "Caricamento video interrotto";
-                break;
-              case pipVideo.error.MEDIA_ERR_NETWORK:
-                errorMessage = "Errore di rete nel caricamento del video";
-                break;
-              case pipVideo.error.MEDIA_ERR_DECODE:
-                errorMessage = "Errore di decodifica video (possibile problema GPU)";
-                break;
-              case pipVideo.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                errorMessage = "Formato video non supportato o URL non valido";
-                break;
-            }
+          // Resetta il video precedente in modo più efficiente
+          if (pipVideo.src !== url) {
+            pipVideo.pause();
+            pipVideo.currentTime = 0;
           }
 
-          pipLoading.innerHTML = `
+          // Imposta attributi per migliorare la compatibilità con streaming
+          pipVideo.crossOrigin = "anonymous";
+          pipVideo.playsInline = true;
+          pipVideo.muted = isMuted;
+          pipVideo.preload = "auto"; // Preload immediato per caricamento più rapido
+
+          // Carica il nuovo URL
+          pipVideo.src = url;
+
+          // Timeout più breve per il caricamento video
+          const loadTimeout = setTimeout(() => {
+            if (pipLoading.style.display !== "none") {
+              console.warn("Timeout caricamento video, mostro comunque");
+              pipLoading.style.display = "none";
+              startTimer();
+            }
+          }, 4000);
+
+          // Gestione eventi video migliorata
+          const handleLoadedData = () => {
+            clearTimeout(loadTimeout);
+            console.log("Video caricato con successo");
+            pipLoading.style.display = "none";
+            pipVideo.style.display = "block";
+            startTimer();
+            // Rimuovi l'event listener per evitare duplicazioni
+            pipVideo.removeEventListener("loadeddata", handleLoadedData);
+            pipVideo.removeEventListener("error", handleError);
+          };
+
+          const handleError = (e) => {
+            clearTimeout(loadTimeout);
+            console.error("Errore nel caricamento del video:", e);
+            let errorMessage = "Errore nel caricamento del video";
+
+            // Fornisci messaggi di errore più specifici
+            if (pipVideo.error) {
+              switch (pipVideo.error.code) {
+                case pipVideo.error.MEDIA_ERR_ABORTED:
+                  errorMessage = "Caricamento video interrotto";
+                  break;
+                case pipVideo.error.MEDIA_ERR_NETWORK:
+                  errorMessage = "Errore di rete nel caricamento del video";
+                  break;
+                case pipVideo.error.MEDIA_ERR_DECODE:
+                  errorMessage = "Errore di decodifica video (possibile problema GPU)";
+                  break;
+                case pipVideo.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                  errorMessage = "Formato video non supportato o URL non valido";
+                  break;
+              }
+            }
+
+            pipLoading.innerHTML = `
                         <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
                         <div class="error-message">
                             <p>${errorMessage}</p>
@@ -269,147 +321,179 @@
                             <small>URL: ${url.substring(0, 50)}${url.length > 50 ? "..." : ""}</small>
                         </div>
                     `;
-        };
+          };
 
-        pipVideo.addEventListener("loadeddata", handleLoadedData, { once: true });
-        pipVideo.addEventListener("error", handleError, { once: true });
+          pipVideo.addEventListener("loadeddata", handleLoadedData, { once: true });
+          pipVideo.addEventListener("error", handleError, { once: true });
 
-        // Forza il caricamento in modo più efficiente
-        pipVideo.load().catch((error) => {
-          clearTimeout(loadTimeout);
-          console.error("Errore nel caricamento forzato del video:", error);
-          handleError({ error: error });
-        });
-      } catch (error) {
-        console.error("Errore nell'inizializzazione del video:", error);
-        pipLoading.innerHTML = `
+          // Forza il caricamento in modo più efficiente
+          pipVideo.load().catch((error) => {
+            clearTimeout(loadTimeout);
+            console.error("Errore nel caricamento forzato del video:", error);
+            handleError({ error: error });
+          });
+        } catch (error) {
+          console.error("Errore nell'inizializzazione del video:", error);
+          pipLoading.innerHTML = `
                     <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
                     <div class="error-message">
                         <p>Errore nell\'inizializzazione del video</p>
                         <p>${error.message}</p>
                     </div>
                 `;
-      }
-    }
-
-    function setupEventListeners() {
-      closeBtn.addEventListener("click", closeWindow);
-      floatingCloseBtn.addEventListener("click", closeWindow);
-
-      // Previeni il menu contestuale
-      pipContainer.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-      });
-    }
-
-    function toggleMute() {
-      isMuted = !isMuted;
-      pipVideo.muted = isMuted;
-      updateMuteButton();
-    }
-
-    function updateMuteButton() {
-      if (isMuted) {
-        muteIcon.style.display = "block";
-        unmuteIcon.style.display = "none";
-      } else {
-        muteIcon.style.display = "none";
-        unmuteIcon.style.display = "block";
-      }
-    }
-
-    function closeWindow() {
-      clearInterval(timerInterval);
-      clearTimeout(fallbackTimeout);
-      window.close();
-    }
-
-    function startTimer() {
-      clearInterval(timerInterval);
-      clearTimeout(fallbackTimeout);
-
-      // Assicurati che il timer sia un numero valido
-      if (isNaN(totalTime) || totalTime <= 0) {
-        totalTime = 10;
-        remainingTime = 10;
-      }
-
-      timerInterval = setInterval(() => {
-        remainingTime--;
-        updateTimerDisplay();
-
-        if (remainingTime <= 0) {
-          clearInterval(timerInterval);
-          clearTimeout(fallbackTimeout); // ← Aggiungi questa linea
-          closeWindow();
         }
-      }, 1000);
+      }
 
-      fallbackTimeout = setTimeout(() => {
+      function setupEventListeners() {
+        closeBtn.addEventListener("click", closeWindow);
+        floatingCloseBtn.addEventListener("click", closeWindow);
+
+        // Previeni il menu contestuale
+        pipContainer.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+        });
+      }
+
+      function toggleMute() {
+        isMuted = !isMuted;
+        pipVideo.muted = isMuted;
+        updateMuteButton();
+      }
+
+      function updateMuteButton() {
+        if (isMuted) {
+          muteIcon.style.display = "block";
+          unmuteIcon.style.display = "none";
+        } else {
+          muteIcon.style.display = "none";
+          unmuteIcon.style.display = "block";
+        }
+      }
+
+      function closeWindow() {
+        clearInterval(timerInterval);
+        clearTimeout(fallbackTimeout);
+        stopMjpegRefresh();
+        window.close();
+      }
+
+      function animateWindowClose() {
+        const duration = 200; // 200ms per l'animazione
+
+        // Aggiungi la classe di animazione
+        pipContainer.style.transition = `transform ${duration}ms ease-in, opacity ${duration}ms ease-in`;
+        pipContainer.style.transform = "scale(0.8)";
+        pipContainer.style.opacity = "0";
+
+        setTimeout(() => {
+          closeWindow();
+        }, duration);
+      }
+
+      function animateWindowOpen() {
+        const duration = 300; // 300ms per l'animazione
+
+        // Imposta lo stato iniziale
+        pipContainer.style.transform = "scale(0.8)";
+        pipContainer.style.opacity = "0";
+
+        // Forza il reflow per applicare lo stato iniziale
+        pipContainer.offsetHeight;
+
+        // Anima allo stato finale
+        pipContainer.style.transition = `transform ${duration}ms ease-out, opacity ${duration}ms ease-out`;
+        pipContainer.style.transform = "scale(1)";
+        pipContainer.style.opacity = "1";
+      }
+
+      function startTimer() {
+        clearInterval(timerInterval);
+        clearTimeout(fallbackTimeout);
+
+        // Assicurati che il timer sia un numero valido
+        if (isNaN(totalTime) || totalTime <= 0) {
+          totalTime = 10;
+          remainingTime = 10;
+        }
+
+        timerInterval = setInterval(() => {
+          remainingTime--;
+          updateTimerDisplay();
+
+          if (remainingTime <= 0) {
+            clearInterval(timerInterval);
+            clearTimeout(fallbackTimeout); // ← Aggiungi questa linea
+            closeWindow();
+          }
+        }, 1000);
+
+        fallbackTimeout = setTimeout(
+          () => {
+            if (timerInterval) {
+              clearInterval(timerInterval);
+              closeWindow();
+            }
+          },
+          (totalTime + 5) * 1000,
+        );
+      }
+
+      function updateTimerDisplay() {
+        const percentage = (remainingTime / totalTime) * 100;
+        timerBar.style.width = `${percentage}%`;
+        timerText.textContent = `${remainingTime}s`;
+
+        // Cambia colore quando mancano pochi secondi
+        if (remainingTime <= 3) {
+          timerBar.style.backgroundColor = "#f44336";
+        } else if (remainingTime <= 5) {
+          timerBar.style.backgroundColor = "#ff9800";
+        } else {
+          timerBar.style.backgroundColor = "#4caf50";
+        }
+      }
+
+      function restartTimer(newDuration) {
+        console.log(`🔄 Riavvio timer con nuova durata: ${newDuration} secondi`);
+
+        // Ferma il timer corrente
         if (timerInterval) {
           clearInterval(timerInterval);
-          closeWindow();
         }
-      }, (totalTime + 5) * 1000);
-    }
+        clearTimeout(fallbackTimeout);
 
-    function updateTimerDisplay() {
-      const percentage = (remainingTime / totalTime) * 100;
-      timerBar.style.width = `${percentage}%`;
-      timerText.textContent = `${remainingTime}s`;
-
-      // Cambia colore quando mancano pochi secondi
-      if (remainingTime <= 3) {
-        timerBar.style.backgroundColor = "#f44336";
-      } else if (remainingTime <= 5) {
-        timerBar.style.backgroundColor = "#ff9800";
-      } else {
-        timerBar.style.backgroundColor = "#4caf50";
-      }
-    }
-
-    function restartTimer(newDuration) {
-      console.log(`🔄 Riavvio timer con nuova durata: ${newDuration} secondi`);
-
-      // Ferma il timer corrente
-      if (timerInterval) {
-        clearInterval(timerInterval);
-      }
-      clearTimeout(fallbackTimeout);
-
-      // Imposta la nuova durata
-      totalTime = parseInt(newDuration) || 10;
-      remainingTime = totalTime;
-      updateTimerDisplay();
-
-      // Riavvia il timer
-      startTimer();
-
-      // Mostra un feedback visivo temporaneo
-      timerBar.style.backgroundColor = "#2196f3";
-      setTimeout(() => {
+        // Imposta la nuova durata
+        totalTime = parseInt(newDuration) || 10;
+        remainingTime = totalTime;
         updateTimerDisplay();
-      }, 500);
-    }
 
-    // Gestione del tema
-    function updateTheme() {
-      const isDarkMode = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        // Riavvia il timer
+        startTimer();
 
-      if (isDarkMode) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      } else {
-        document.documentElement.setAttribute("data-theme", "light");
+        // Mostra un feedback visivo temporaneo
+        timerBar.style.backgroundColor = "#2196f3";
+        setTimeout(() => {
+          updateTimerDisplay();
+        }, 500);
       }
-    }
 
-    updateTheme();
+      // Gestione del tema
+      function updateTheme() {
+        const isDarkMode = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-    // Ascolta i cambiamenti del tema di sistema
-    if (window.matchMedia) {
-      window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", updateTheme);
-    }
-  </script>
-</body>
+        if (isDarkMode) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        } else {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      }
 
+      updateTheme();
+
+      // Ascolta i cambiamenti del tema di sistema
+      if (window.matchMedia) {
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", updateTheme);
+      }
+    </script>
+  </body>
 </html>
