@@ -94,14 +94,22 @@ header h1 {
 main {
   flex: 1;
   padding: 2rem;
+  padding-top: 5rem;
   overflow-y: auto;
 }
 
 /* Tabs */
 .tabs {
   display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background-color: var(--bg-primary);
   margin-bottom: 2rem;
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 4px var(--shadow);
 }
 
 .tab-btn {
@@ -315,6 +323,23 @@ select:focus {
   gap: 1rem;
   justify-content: flex-end;
   margin-top: 2rem;
+}
+
+/* Floating save button */
+.floating-save-btn {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 999;
+  border-radius: 50px;
+  padding: 1rem 2rem;
+  box-shadow: 0 4px 12px var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.floating-save-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px var(--shadow);
 }
 
 /* Sensor mappings */

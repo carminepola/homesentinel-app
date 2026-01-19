@@ -18,6 +18,7 @@ const connectionStatus = document.getElementById("connection-status");
 const connectionText = document.getElementById("connection-text");
 const dndToggle = document.getElementById("dnd-toggle");
 const dndStatus = document.getElementById("dnd-status");
+const darkModeToggle = document.getElementById("dark-mode-toggle");
 
 // Inizializzazione
 document.addEventListener("DOMContentLoaded", async () => {
@@ -57,6 +58,14 @@ function setupEventListeners() {
         dndStatus.textContent = dndMode ? "Attivato" : "Disattivato";
       }
       // Il processo principale gestirà l'aggiornamento dello stato DND
+    });
+  }
+
+  // Event listener per il toggle modalità scura
+  if (darkModeToggle && themeManager) {
+    darkModeToggle.addEventListener("change", () => {
+      const newTheme = darkModeToggle.checked ? "dark" : "light";
+      themeManager.setTheme(newTheme);
     });
   }
 
@@ -190,6 +199,11 @@ function updateUIFromSettings() {
   // Auto start
   const autoStart = document.getElementById("auto-start");
   if (autoStart) autoStart.checked = appSettings.autoStart || false;
+
+  // Dark mode
+  if (darkModeToggle && themeManager) {
+    darkModeToggle.checked = themeManager.getCurrentTheme() === "dark";
+  }
 
   // Update sensor mappings list
   if (mappingManager) {
