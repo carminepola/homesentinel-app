@@ -43,6 +43,15 @@ const appConfig = {
     heartbeatInterval: 30000,
   },
 
+  // Configurazione streaming HLS
+  hls: {
+    // Endpoint per ottenere l'URL HLS tramite WebSocket
+    // Home Assistant supporta lo streaming HLS tramite l'API WebSocket
+    endpoint: "/api/camera_proxy_stream",
+    // Timeout per la richiesta HLS (in millisecondi)
+    timeout: 10000,
+  },
+
  
 
   // Dimensioni predefinite per le finestre PiP

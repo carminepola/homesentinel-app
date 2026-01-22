@@ -200,6 +200,10 @@ function updateUIFromSettings() {
   const autoStart = document.getElementById("auto-start");
   if (autoStart) autoStart.checked = appSettings.autoStart || false;
 
+  // HLS streaming
+  const useHls = document.getElementById("use-hls");
+  if (useHls) useHls.checked = appSettings.streamingSettings?.useHLS || false;
+
   // Dark mode
   if (darkModeToggle && themeManager) {
     darkModeToggle.checked = themeManager.getCurrentTheme() === "dark";
@@ -222,6 +226,9 @@ async function saveSettings() {
       position: document.getElementById("pip-position")?.value || "top-right",
       multiEventMode: document.getElementById("multi-event-mode")?.value || "cascade",
       size: document.getElementById("default-size")?.value || "medium",
+    },
+    streamingSettings: {
+      useHLS: document.getElementById("use-hls")?.checked || false,
     },
     sensorCameraMappings: appSettings.sensorCameraMappings || [],
   };

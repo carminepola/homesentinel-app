@@ -241,7 +241,7 @@ class WebSocketManager {
     return this.sensorStates;
   }
 
-  async getCameraUrlWithToken(cameraId, homeAssistantUrl, homeAssistantToken) {
+  async getCameraUrlWithToken(cameraId, homeAssistantUrl, homeAssistantToken, useHLS = false) {
     if (!cameraId || !homeAssistantUrl || !homeAssistantToken) {
       return null;
     }
@@ -260,6 +260,23 @@ class WebSocketManager {
 
       const cameraState = await response.json();
 
+      // Se HLS è abilitato, prova prima l'API WebSocket per ottenere l'URL HLS
+      // Se fallisce, fallback a MJPEG
+      if (useHLS) {
+        try {
+          const hlsUrl = await this.getHlsStreamUrl(cameraId, homeAssistantUrl);
+          if (hlsUrl) {
+            return hlsUrl;
+          }
+          
+          console.log(`HLS non disponibile per ${cameraId}, fallback a MJPEG`);
+        } catch (hlsError) {
+          console.warn(`Errore nell'ottenere l'URL HLS per ${cameraId}:`, hlsError.message);
+          console.log(`Fallback a MJPEG per ${cameraId}`);
+        }
+      }
+
+      // Fallback a MJPEG
       if (cameraState.attributes?.entity_picture) {
         return `${homeAssistantUrl}${cameraState.attributes.entity_picture}`;
       } else if (cameraState.attributes?.access_token) {
@@ -271,6 +288,58 @@ class WebSocketManager {
       console.error(`Errore nell'ottenere l'URL della camera ${cameraId}:`, error);
       return null;
     }
+  }
+
+  async getHlsStreamUrl(cameraId, homeAssistantUrl) {
+    return new Promise((resolve, reject) => {
+      if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
+        reject(new Error("WebSocket non connesso"));
+        return;
+      }
+
+      const requestId = this.getNextSubscriptionId();
+      const timeout = setTimeout(() => {
+        reject(new Error("Timeout nella richiesta HLS"));
+      }, appConfig.hls.timeout);
+
+      // Listener per la risposta
+      const messageHandler = (data) => {
+        try {
+          const message = JSON.parse(data);
+
+          if (message.id === requestId && message.type === "result") {
+            clearTimeout(timeout);
+            this.wsConnection.removeListener("message", messageHandler);
+
+            if (message.success && message.result && message.result.url) {
+              // Costruisci l'URL completo
+              const hlsUrl = `${homeAssistantUrl}${message.result.url}`;
+              console.log(`URL HLS ottenuto: ${hlsUrl}`);
+              resolve(hlsUrl);
+            } else {
+              // HLS non supportato per questa camera
+              console.warn(`HLS non supportato per camera ${cameraId}`);
+              reject(new Error("HLS non supportato"));
+            }
+          }
+        } catch (error) {
+          console.error("Errore nel parsing della risposta HLS:", error);
+          reject(error);
+        }
+      };
+
+      this.wsConnection.on("message", messageHandler);
+
+      // Invia la richiesta per ottenere l'URL HLS
+      const request = {
+        id: requestId,
+        type: "camera/stream",
+        entity_id: cameraId,
+      };
+
+      console.log(`Invio richiesta HLS per camera ${cameraId}:`, request);
+      this.wsConnection.send(JSON.stringify(request));
+    });
   }
 
   closeConnection() {

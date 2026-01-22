@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PiP Camera</title>
     <link rel="stylesheet" href="pip-styles.css" />
+    <!-- HLS.js per lo streaming HLS -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <!-- Preload risorse critiche per caricamento più rapido -->
     <link rel="preload" href="assets/loading.svg" as="image" />
   </head>
@@ -98,7 +100,7 @@
 
       function loadCamera(config) {
         console.log("Caricamento camera con config:", config);
-        const { url, duration } = config;
+        const { url, duration, useHLS, streamType } = config;
 
         // Verifica rapida dei dati
         if (!url) {
@@ -124,14 +126,16 @@
         pipVideo.style.display = "none";
         mjpegStream.style.display = "none";
 
-        // Rileva se è uno stream MJPEG di Home Assistant (controllo più veloce)
-        const isMjpegStream = url.includes("camera_proxy_stream") || url.includes("/api/camera_proxy_stream/");
-
-        console.log(`Tipo di stream rilevato: ${isMjpegStream ? "MJPEG" : "Video standard"}`);
+        // Usa il tipo di stream fornito dal backend
+        const actualStreamType = streamType || "mjpeg";
+        console.log(`Tipo di stream: ${actualStreamType}`);
 
         // Carica il contenuto in modo asincrono per non bloccare l'UI
         requestAnimationFrame(() => {
-          if (isMjpegStream) {
+          if (actualStreamType === "hls") {
+            // Carica stream HLS
+            loadHlsStream(url);
+          } else if (actualStreamType === "mjpeg") {
             // Carica stream MJPEG
             loadMjpegStream(url);
           } else {
@@ -139,6 +143,104 @@
             loadStandardVideo(url);
           }
         });
+      }
+
+      function loadHlsStream(url) {
+        console.log(`Caricamento stream HLS da: ${url}`);
+
+        try {
+          // Nascondi lo stream MJPEG e mostra il video
+          mjpegStream.style.display = "none";
+          pipVideo.style.display = "block";
+
+          // Verifica se HLS.js è supportato
+          if (Hls.isSupported()) {
+            console.log("HLS.js supportato, inizializzazione...");
+            const hls = new Hls({
+              debug: false,
+              enableWorker: true,
+              lowLatencyMode: true,
+              backBufferLength: 90,
+            });
+
+            hls.loadSource(url);
+            hls.attachMedia(pipVideo);
+
+            hls.on(Hls.Events.MANIFEST_PARSED, function () {
+              console.log("Manifest HLS caricato con successo");
+              pipLoading.style.display = "none";
+              pipVideo.play().catch((error) => {
+                console.error("Errore nella riproduzione automatica:", error);
+              });
+              startTimer();
+            });
+
+            hls.on(Hls.Events.ERROR, function (event, data) {
+              if (data.fatal) {
+                switch (data.type) {
+                  case Hls.ErrorTypes.NETWORK_ERROR:
+                    console.error("Errore di rete HLS:", data);
+                    hls.startLoad();
+                    break;
+                  case Hls.ErrorTypes.MEDIA_ERROR:
+                    console.error("Errore media HLS:", data);
+                    hls.recoverMediaError();
+                    break;
+                  default:
+                    console.error("Errore fatale HLS:", data);
+                    hls.destroy();
+                    break;
+                }
+              }
+            });
+
+            // Salva l'istanza HLS per la pulizia
+            window.hlsInstance = hls;
+          } else if (pipVideo.canPlayType("application/vnd.apple.mpegurl")) {
+            // Supporto nativo HLS (Safari)
+            console.log("Supporto HLS nativo rilevato");
+            pipVideo.src = url;
+
+            pipVideo.addEventListener("loadedmetadata", function () {
+              console.log("Video HLS caricato con successo");
+              pipLoading.style.display = "none";
+              pipVideo.play().catch((error) => {
+                console.error("Errore nella riproduzione automatica:", error);
+              });
+              startTimer();
+            });
+
+            pipVideo.addEventListener("error", function (e) {
+              console.error("Errore nel caricamento del video HLS:", e);
+              pipLoading.innerHTML = `
+                <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
+                <div class="error-message">
+                  <p>Errore nel caricamento dello stream HLS</p>
+                  <p>Verifica l'URL della telecamera e la connessione</p>
+                  <small>URL: ${url.substring(0, 50)}${url.length > 50 ? "..." : ""}</small>
+                </div>
+              `;
+            });
+          } else {
+            console.error("HLS non supportato in questo browser");
+            pipLoading.innerHTML = `
+              <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
+              <div class="error-message">
+                <p>HLS non supportato in questo browser</p>
+                <p>Prova a disabilitare l'opzione HLS nelle impostazioni</p>
+              </div>
+            `;
+          }
+        } catch (error) {
+          console.error("Errore nell'inizializzazione dello stream HLS:", error);
+          pipLoading.innerHTML = `
+            <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
+            <div class="error-message">
+              <p>Errore nell'inizializzazione dello stream HLS</p>
+              <p>${error.message}</p>
+            </div>
+          `;
+        }
       }
 
       function loadMjpegStream(url) {
@@ -326,6 +428,19 @@
       function closeWindow() {
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
+
+        // Pulisci l'istanza HLS se presente
+        if (window.hlsInstance) {
+          window.hlsInstance.destroy();
+          window.hlsInstance = null;
+        }
+
+        // Ferma il video
+        if (pipVideo) {
+          pipVideo.pause();
+          pipVideo.src = "";
+        }
+
         window.close();
       }
 

@@ -74,9 +74,21 @@ class PiPWindowManager {
       pipWindow.once("ready-to-show", () => {
         pipWindow.showInactive();
         this.windowCameraMap.set(pipWindow.id, cameraUrl);
+
+        const globalSettings = this.settingsManager.getSettings();
+        const useHLS = globalSettings.streamingSettings?.useHLS || false;
+
+        // Determina il tipo di stream
+        let streamType = "mjpeg";
+        if (useHLS && (cameraUrl.includes(".m3u8") || cameraUrl.includes("/api/hls/"))) {
+          streamType = "hls";
+        }
+
         pipWindow.webContents.send("load-camera", {
           url: cameraUrl,
           duration: duration || 10,
+          useHLS: useHLS,
+          streamType: streamType,
         });
 
         // Invia il messaggio per l'animazione di apertura
@@ -378,7 +390,8 @@ class PiPWindowManager {
         return;
       }
 
-      finalCameraUrl = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken);
+      const useHLS = settings.streamingSettings?.useHLS || false;
+      finalCameraUrl = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
 
       if (!finalCameraUrl) {
         console.error("Impossibile ottenere l'URL della camera");
@@ -486,7 +499,8 @@ class PiPWindowManager {
         return;
       }
 
-      finalCameraUrl = await this.websocketManager.getCameraUrlWithToken(cameraId, globalSettings.homeAssistantUrl, globalSettings.homeAssistantToken);
+      const useHLS = globalSettings.streamingSettings?.useHLS || false;
+      finalCameraUrl = await this.websocketManager.getCameraUrlWithToken(cameraId, globalSettings.homeAssistantUrl, globalSettings.homeAssistantToken, useHLS);
 
       if (!finalCameraUrl) {
         console.error("Impossibile ottenere l'URL della camera per il test");

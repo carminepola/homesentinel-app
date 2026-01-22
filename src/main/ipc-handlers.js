@@ -197,7 +197,7 @@ class IPCHandlers {
     }
   }
 
-  async handleGetCameraUrlWithToken(cameraId) {
+  async handleGetCameraUrlWithToken(cameraIdm) {
     const settings = this.settingsManager.getSettings();
 
     if (!settings.homeAssistantUrl || !settings.homeAssistantToken) {
@@ -209,17 +209,25 @@ class IPCHandlers {
     }
 
     try {
+      const useHLS = settings.streamingSettings?.useHLS || false;
       const cameraUrl = await this.websocketManager.getCameraUrlWithToken(
         cameraId,
         settings.homeAssistantUrl,
-        settings.homeAssistantToken
+        settings.homeAssistantToken,
+        useHLS
       );
 
       if (!cameraUrl) {
         return { error: "Impossibile ottenere l'URL della camera" };
       }
 
-      return { url: cameraUrl };
+      useHLS = false;
+
+
+
+
+
+      return { url: cameraUrl, useHLS };
     } catch (error) {
       return { error: error.message };
     }

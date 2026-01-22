@@ -11,6 +11,9 @@ const defaultSettings = {
     multiEventMode: "cascade",
     size: "medium",
   },
+  streamingSettings: {
+    useHLS: false, // Utilizza HLS streaming via WebSocket invece di camera_proxy_stream
+  },
 };
 
 module.exports = { defaultSettings };
