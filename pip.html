@@ -69,8 +69,6 @@
       let remainingTime = 10;
       let totalTime = 10;
       let fallbackTimeout;
-      let mjpegRefreshInterval = null;
-      let mjpegRefreshTimer = null;
       // Inizializzazione ottimizzata
       document.addEventListener("DOMContentLoaded", () => {
         // Setup immediato degli event listener critici
@@ -101,9 +99,6 @@
       function loadCamera(config) {
         console.log("Caricamento camera con config:", config);
         const { url, duration } = config;
-
-        // Ferma qualsiasi refresh MJPEG esistente
-        stopMjpegRefresh();
 
         // Verifica rapida dei dati
         if (!url) {
@@ -164,7 +159,6 @@
               console.warn("Timeout caricamento MJPEG, mostro comunque");
               pipLoading.style.display = "none";
               startTimer();
-              startMjpegRefresh(url);
             }
           }, 3000);
 
@@ -174,7 +168,6 @@
             console.log("Stream MJPEG caricato con successo");
             pipLoading.style.display = "none";
             startTimer();
-            startMjpegRefresh(url);
           };
 
           mjpegStream.onerror = (e) => {
@@ -198,46 +191,6 @@
               <p>${error.message}</p>
             </div>
           `;
-        }
-      }
-
-      function startMjpegRefresh(url) {
-        // Ferma qualsiasi timer di refresh esistente
-        stopMjpegRefresh();
-
-        // Configurazione del refresh (può essere personalizzata)
-        // 33ms = 30fps, 1000ms = 1fps, 2000ms = 0.5fps
-        const refreshInterval = 33; // 30fps (33ms per frame)
-
-        console.log(`Avvio refresh MJPEG ogni ${refreshInterval}ms`);
-
-        // Avvia il timer di refresh periodico
-        mjpegRefreshTimer = setInterval(() => {
-          refreshMjpegStream(url);
-        }, refreshInterval);
-      }
-
-      function refreshMjpegStream(url) {
-        if (!mjpegStream || mjpegStream.style.display === "none") {
-          // Non refreshare se lo stream non è visibile
-          return;
-        }
-
-        // Aggiorna l'URL con un nuovo timestamp per forzare il refresh
-        const timestamp = Date.now();
-        const newSrc = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`;
-
-        // Usa requestAnimationFrame per evitare flicker
-        requestAnimationFrame(() => {
-          mjpegStream.src = newSrc;
-        });
-      }
-
-      function stopMjpegRefresh() {
-        if (mjpegRefreshTimer) {
-          clearInterval(mjpegRefreshTimer);
-          mjpegRefreshTimer = null;
-          console.log("Refresh MJPEG fermato");
         }
       }
 
@@ -373,7 +326,6 @@
       function closeWindow() {
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
-        stopMjpegRefresh();
         window.close();
       }
 
