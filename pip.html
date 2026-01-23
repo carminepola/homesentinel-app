@@ -26,7 +26,7 @@
       </div>
 
       <div class="pip-video-container">
-        <video id="pip-video" autoplay muted playsinline style="display: none"></video>
+        <video id="pip-video" autoplay playsinline style="display: none"></video>
         <img id="mjpeg-stream" style="display: none; width: 100%; height: 100%; object-fit: cover" alt="Stream Camera" />
         <div class="pip-loading" id="pip-loading">
           <img src="assets/loading.svg" alt="Caricamento..." class="loading-image" />
@@ -38,6 +38,42 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+
+        <!-- Pulsante audio (solo per HLS) -->
+        <button id="audio-btn" class="audio-btn" title="Audio" style="display: none">
+          <svg
+            id="mute-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="23" y1="9" x2="17" y2="15"></line>
+            <line x1="17" y1="9" x2="23" y2="15"></line>
+          </svg>
+          <svg
+            id="unmute-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            style="display: none"
+          >
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
           </svg>
         </button>
       </div>
@@ -62,6 +98,7 @@
       const unmuteIcon = document.getElementById("unmute-icon");
       const closeBtn = document.getElementById("close-btn");
       const floatingCloseBtn = document.getElementById("floating-close-btn");
+      const audioBtn = document.getElementById("audio-btn");
       const timerBar = document.getElementById("timer-bar");
       const timerText = document.getElementById("timer-text");
 
@@ -71,6 +108,7 @@
       let remainingTime = 10;
       let totalTime = 10;
       let fallbackTimeout;
+      let isTimerPaused = false;
       // Inizializzazione ottimizzata
       document.addEventListener("DOMContentLoaded", () => {
         // Setup immediato degli event listener critici
@@ -126,6 +164,9 @@
         pipVideo.style.display = "none";
         mjpegStream.style.display = "none";
 
+        // Nascondi il pulsante audio all'inizio
+        audioBtn.style.display = "none";
+
         // Usa il tipo di stream fornito dal backend
         const actualStreamType = streamType || "mjpeg";
         console.log(`Tipo di stream: ${actualStreamType}`);
@@ -152,6 +193,14 @@
           // Nascondi lo stream MJPEG e mostra il video
           mjpegStream.style.display = "none";
           pipVideo.style.display = "block";
+
+          // Mostra il pulsante audio per HLS
+          audioBtn.style.display = "flex";
+
+          // Imposta il video come muto per consentire l'autoplay
+          isMuted = true;
+          pipVideo.muted = isMuted;
+          updateMuteButton();
 
           // Verifica se HLS.js è supportato
           if (Hls.isSupported()) {
@@ -251,6 +300,9 @@
           pipVideo.style.display = "none";
           mjpegStream.style.display = "block";
 
+          // Nascondi il pulsante audio (MJPEG non supporta audio)
+          audioBtn.style.display = "none";
+
           // Imposta l'URL dello stream MJPEG con cache busting per evitare cache vecchie
           const timestamp = Date.now();
           mjpegStream.src = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`;
@@ -304,6 +356,9 @@
         pipVideo.muted = isMuted;
         updateMuteButton();
         console.log(`Audio non supportato, video impostato come muto`);
+
+        // Nascondi il pulsante audio (video standard non supporta audio)
+        audioBtn.style.display = "none";
 
         try {
           // Mostra immediatamente il container del video per ridurre il percepito di attesa
@@ -402,10 +457,21 @@
       function setupEventListeners() {
         closeBtn.addEventListener("click", closeWindow);
         floatingCloseBtn.addEventListener("click", closeWindow);
+        audioBtn.addEventListener("click", toggleMute);
 
         // Previeni il menu contestuale
         pipContainer.addEventListener("contextmenu", (e) => {
           e.preventDefault();
+        });
+
+        // Pausa il timer quando il mouse entra nella finestra PiP
+        pipContainer.addEventListener("mouseenter", () => {
+          pauseTimer();
+        });
+
+        // Riprendi il timer quando il mouse esce dalla finestra PiP
+        pipContainer.addEventListener("mouseleave", () => {
+          resumeTimer();
         });
       }
 
@@ -428,6 +494,7 @@
       function closeWindow() {
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
+        isTimerPaused = false;
 
         // Pulisci l'istanza HLS se presente
         if (window.hlsInstance) {
@@ -474,6 +541,12 @@
       }
 
       function startTimer() {
+        // Non avviare il timer se è in pausa
+        if (isTimerPaused) {
+          console.log("Timer in pausa, non avvio");
+          return;
+        }
+
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
 
@@ -489,7 +562,7 @@
 
           if (remainingTime <= 0) {
             clearInterval(timerInterval);
-            clearTimeout(fallbackTimeout); // ← Aggiungi questa linea
+            clearTimeout(fallbackTimeout);
             closeWindow();
           }
         }, 1000);
@@ -520,6 +593,25 @@
         }
       }
 
+      function pauseTimer() {
+        if (isTimerPaused) return;
+        isTimerPaused = true;
+        clearInterval(timerInterval);
+        clearTimeout(fallbackTimeout);
+        console.log("⏸️ Timer in pausa (hover attivo)");
+        // Mostra indicazione visiva che il timer è in pausa
+        timerText.textContent = `${remainingTime}s (PAUSA)`;
+        timerBar.style.backgroundColor = "#2196f3";
+      }
+
+      function resumeTimer() {
+        if (!isTimerPaused) return;
+        isTimerPaused = false;
+        console.log("▶️ Timer ripreso (hover disattivato)");
+        updateTimerDisplay();
+        startTimer();
+      }
+
       function restartTimer(newDuration) {
         console.log(`🔄 Riavvio timer con nuova durata: ${newDuration} secondi`);
 
@@ -528,6 +620,7 @@
           clearInterval(timerInterval);
         }
         clearTimeout(fallbackTimeout);
+        isTimerPaused = false;
 
         // Imposta la nuova durata
         totalTime = parseInt(newDuration) || 10;

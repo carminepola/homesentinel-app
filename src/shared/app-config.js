@@ -49,16 +49,24 @@ const appConfig = {
     // Home Assistant supporta lo streaming HLS tramite l'API WebSocket
     endpoint: "/api/camera_proxy_stream",
     // Timeout per la richiesta HLS (in millisecondi)
-    timeout: 10000,
+    timeout: 5000,
+    maxBufferLength: 10,     // Secondi di video da tenere in memoria
+    maxMaxBufferLength: 30,  // Massimo buffer consentito
+    startLevel: 0,           // Parte dalla qualità più bassa per evitare blocchi iniziali
+    abrEwmaDefaultEstimate: 500000
+
   },
 
- 
+
 
   // Dimensioni predefinite per le finestre PiP
   pipSizes: {
     small: { width: 200, height: 150 },
     medium: { width: 320, height: 240 },
     large: { width: 480, height: 360 },
+    square: { width: 240, height: 240 },
+    horizontal: { width: 400, height: 225 },
+    vertical: { width: 200, height: 360 },
   },
 
   // Posizioni predefinite per le finestre PiP

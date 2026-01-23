@@ -324,3 +324,31 @@ body {
 .floating-close-btn:active {
   transform: scale(0.95);
 }
+
+/* Pulsante audio (solo per HLS) */
+.audio-btn {
+  position: absolute;
+  top: 8px;
+  right: 40px;
+  width: 24px;
+  height: 24px;
+  background-color: rgba(0, 0, 0, 0.7);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 14px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  z-index: 1000;
+}
+
+.audio-btn:hover {
+  background-color: rgba(33, 150, 243, 0.9);
+  transform: scale(1.1);
+}
+
+.audio-btn:active {
+  transform: scale(0.95);
+}
