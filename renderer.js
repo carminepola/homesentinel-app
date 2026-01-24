@@ -194,6 +194,19 @@ function updateUIFromSettings() {
   const defaultSize = document.getElementById("default-size");
   if (defaultSize) defaultSize.value = appSettings.pipSettings?.size || "medium";
 
+  // Margin settings
+  const marginTop = document.getElementById("margin-top");
+  if (marginTop) marginTop.value = appSettings.pipSettings?.margins?.top || 40;
+
+  const marginRight = document.getElementById("margin-right");
+  if (marginRight) marginRight.value = appSettings.pipSettings?.margins?.right || 20;
+
+  const marginBottom = document.getElementById("margin-bottom");
+  if (marginBottom) marginBottom.value = appSettings.pipSettings?.margins?.bottom || 20;
+
+  const marginLeft = document.getElementById("margin-left");
+  if (marginLeft) marginLeft.value = appSettings.pipSettings?.margins?.left || 20;
+
   // Auto start
   const autoStart = document.getElementById("auto-start");
   if (autoStart) autoStart.checked = appSettings.autoStart || false;
@@ -224,6 +237,12 @@ async function saveSettings() {
       position: document.getElementById("pip-position")?.value || "top-right",
       multiEventMode: "cascade", // Always use cascade mode
       size: document.getElementById("default-size")?.value || "medium",
+      margins: {
+        top: parseInt(document.getElementById("margin-top")?.value || 20),
+        right: parseInt(document.getElementById("margin-right")?.value || 20),
+        bottom: parseInt(document.getElementById("margin-bottom")?.value || 20),
+        left: parseInt(document.getElementById("margin-left")?.value || 20),
+      },
     },
     streamingSettings: {
       useHLS: document.getElementById("use-hls")?.checked || false,

@@ -136,7 +136,16 @@ class PiPWindowManager {
 
   calculatePosition(position, windowWidth, windowHeight) {
     const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
-    const margin = appConfig.margin;
+    
+    // Get margins from settings, falling back to app config defaults
+    const settings = this.settingsManager.getSettings();
+    const settingsMargins = settings.pipSettings?.margins || {};
+    const margins = {
+      top: settingsMargins.top || appConfig.margins.top,
+      right: settingsMargins.right || appConfig.margins.right,
+      bottom: settingsMargins.bottom || appConfig.margins.bottom,
+      left: settingsMargins.left || appConfig.margins.left,
+    };
 
     // Get existing windows in this position, sorted by their Y coordinate
     const existingWindows = this.pipWindows
@@ -152,7 +161,7 @@ class PiPWindowManager {
       });
 
     // Find the first available position
-    let currentY = position.includes("top") ? margin : screenHeight - windowHeight - margin;
+    let currentY = position.includes("top") ? margins.top : screenHeight - windowHeight - margins.bottom;
     const direction = position.includes("top") ? 1 : -1;
 
     for (const window of existingWindows) {
@@ -181,20 +190,20 @@ class PiPWindowManager {
     let x, y;
     switch (position) {
       case "top-left":
-        x = margin;
+        x = margins.left;
         y = currentY;
         break;
       case "top-right":
-        x = screenWidth - windowWidth - margin;
+        x = screenWidth - windowWidth - margins.right;
         y = currentY;
         break;
       case "bottom-left":
-        x = margin;
+        x = margins.left;
         y = currentY;
         break;
       case "bottom-right":
       default:
-        x = screenWidth - windowWidth - margin;
+        x = screenWidth - windowWidth - margins.right;
         y = currentY;
         break;
     }
@@ -315,7 +324,17 @@ class PiPWindowManager {
 
       // Ricalcola la posizione di ogni finestra
       const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
-      const margin = appConfig.margin;
+      
+      // Get margins from settings, falling back to app config defaults
+      const settings = this.settingsManager.getSettings();
+      const settingsMargins = settings.pipSettings?.margins || {};
+      const margins = {
+        top: settingsMargins.top || appConfig.margins.top,
+        right: settingsMargins.right || appConfig.margins.right,
+        bottom: settingsMargins.bottom || appConfig.margins.bottom,
+        left: settingsMargins.left || appConfig.margins.left,
+      };
+      
       const direction = position.includes("top") ? 1 : -1;
 
       // Sort windows by their current Y position (already done above)
@@ -327,7 +346,7 @@ class PiPWindowManager {
       // Calculate initial Y position based on the first window's size
       const firstWindowSettings = this.windowSettingsMap.get(windows[0].id);
       const firstWindowSize = this.getCameraSize(firstWindowSettings?.size, firstWindowSettings);
-      let currentY = position.includes("top") ? margin : screenHeight - firstWindowSize.height - margin;
+      let currentY = position.includes("top") ? margins.top : screenHeight - firstWindowSize.height - margins.bottom;
 
       windows.forEach((window) => {
         const settings = this.windowSettingsMap.get(window.id);
@@ -338,17 +357,17 @@ class PiPWindowManager {
         let x;
         switch (position) {
           case "top-left":
-            x = margin;
+            x = margins.left;
             break;
           case "top-right":
-            x = screenWidth - windowWidth - margin;
+            x = screenWidth - windowWidth - margins.right;
             break;
           case "bottom-left":
-            x = margin;
+            x = margins.left;
             break;
           case "bottom-right":
           default:
-            x = screenWidth - windowWidth - margin;
+            x = screenWidth - windowWidth - margins.right;
             break;
         }
 

@@ -676,3 +676,14 @@ select:focus {
   outline: none;
   border-color: var(--accent);
 }
+
+/* Margin inputs */
+.margin-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.margin-inputs .input-group {
+  flex: 1;
+}

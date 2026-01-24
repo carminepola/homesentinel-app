@@ -77,8 +77,13 @@ const appConfig = {
     "bottom-right": { offsetX: 20, offsetY: 20 },
   },
 
-  // Margini per il posizionamento
-  margin: 20,
+  // Margini predefiniti per il posizionamento (verranno sovrascritti dalle impostazioni utente)
+  margins: {
+    top: 20,
+    right: 20,
+    bottom: 20,
+    left: 20,
+  },
 };
 
 module.exports = appConfig;

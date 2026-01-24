@@ -19,137 +19,136 @@ let trayManager;
 let ipcHandlers;
 let isWebSocketConnected = false;
 let isSystemLocked = false;
+let gotTheLock;
 
 // Crea la finestra principale
-  function createMainWindow() {
-    mainWindow = new BrowserWindow({
-      width: appConfig.mainWindow.width,
-      height: appConfig.mainWindow.height,
-      minWidth: appConfig.mainWindow.minWidth,
-      icon: path.join(__dirname, appConfig.paths.iconPng),
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-      },
+function createMainWindow() {
+  mainWindow = new BrowserWindow({
+    width: appConfig.mainWindow.width,
+    height: appConfig.mainWindow.height,
+    minWidth: appConfig.mainWindow.minWidth,
+    icon: path.join(__dirname, appConfig.paths.iconPng),
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
 
-      show: false,
-    });
+    show: false,
+  });
 
-    mainWindow.loadFile(appConfig.paths.mainWindowHtml);
+  mainWindow.loadFile(appConfig.paths.mainWindowHtml);
 
-    mainWindow.once("ready-to-show", () => {
-      // Controlla se Home Assistant è configurato
-      const settings = settingsManager.getSettings();
-      const hasHomeAssistantConfig = settings.homeAssistantUrl && settings.homeAssistantToken;
+  mainWindow.once("ready-to-show", () => {
+    // Controlla se Home Assistant è configurato
+    const settings = settingsManager.getSettings();
+    const hasHomeAssistantConfig = settings.homeAssistantUrl && settings.homeAssistantToken;
 
-      // Mostra la finestra solo se Home Assistant non è configurato
-      // Se è configurato, rimane in tray icon
+    // Mostra la finestra solo se Home Assistant non è configurato
+    // Se è configurato, rimane in tray icon
 
-      if (hasHomeAssistantConfig) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
+    if (hasHomeAssistantConfig) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
+    }
+  });
+
+  mainWindow.on("close", (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      // Assicurati che l'app non si chiuda quando la finestra viene nascosta
+      if (process.platform !== "darwin" && trayManager && trayManager.tray) {
+        // Su Windows/Linux, mantieni l'app in esecuzione se c'è la tray
+        return;
       }
-    });
+    }
+  });
 
-    mainWindow.on("close", (event) => {
-      if (!isQuitting) {
-        event.preventDefault();
-        mainWindow.hide();
-        // Assicurati che l'app non si chiuda quando la finestra viene nascosta
-        if (process.platform !== "darwin" && trayManager && trayManager.tray) {
-          // Su Windows/Linux, mantieni l'app in esecuzione se c'è la tray
-          return;
-        }
+  // Menu dell'app
+  const template = [
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Impostazioni",
+          accelerator: "CmdOrCtrl+,",
+          click: () => {
+            mainWindow.webContents.send("open-settings");
+          },
+        },
+        { type: "separator" },
+        {
+          label: "Esci",
+          accelerator: "CmdOrCtrl+Q",
+          click: () => {
+            isQuitting = true;
+            app.quit();
+          },
+        },
+      ],
+    },
+    {
+      label: "Visualizza",
+      submenu: [{ role: "reload" }, { role: "toggleDevTools" }],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+// Inizializza i gestori
+function initializeManagers() {
+  settingsManager = new SettingsManager(app);
+  settingsManager.initializeSettingsPath();
+  settingsManager.loadSettings();
+
+  websocketManager = new WebSocketManager(settingsManager);
+  pipWindowManager = new PiPWindowManager(settingsManager);
+  pipWindowManager.setWebSocketManager(websocketManager);
+  trayManager = new TrayManager(settingsManager);
+  // ipcHandlers verrà inizializzato dopo la creazione della finestra
+}
+
+// Configura i callback per gli eventi
+function setupEventCallbacks() {
+  websocketManager.setEventCallbacks({
+    onSensorEvent: (eventData) => {
+      const dndMode = trayManager.getDndMode();
+      if (dndMode || isSystemLocked) {
+        return;
       }
-    });
+      pipWindowManager.handleSensorEvent(eventData);
+    },
+    onConnectionStatusChange: (isConnected) => {
+      isWebSocketConnected = isConnected;
+      mainWindow.webContents.send("connection-status-changed", isConnected);
+    },
+  });
 
-    // Menu dell'app
-    const template = [
-      {
-        label: "File",
-        submenu: [
-          {
-            label: "Impostazioni",
-            accelerator: "CmdOrCtrl+,",
-            click: () => {
-              mainWindow.webContents.send("open-settings");
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Esci",
-            accelerator: "CmdOrCtrl+Q",
-            click: () => {
-              isQuitting = true;
-              app.quit();
-            },
-          },
-        ],
-      },
-      {
-        label: "Visualizza",
-        submenu: [{ role: "reload" }, { role: "toggleDevTools" }],
-      },
-    ];
+  trayManager.setEventCallbacks({
+    onDndModeChange: (dndMode) => {
+      mainWindow.webContents.send("dnd-mode-changed", dndMode);
+    },
+    onQuit: () => {
+      isQuitting = true;
+      app.quit();
+    },
+  });
+}
 
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
-  }
+// Eventi dell'applicazione
+// Gestione istanza singola
+gotTheLock = app.requestSingleInstanceLock();
 
-  // Inizializza i gestori
-  function initializeManagers() {
-    settingsManager = new SettingsManager(app);
-    settingsManager.initializeSettingsPath();
-    settingsManager.loadSettings();
-
-    websocketManager = new WebSocketManager(settingsManager);
-    pipWindowManager = new PiPWindowManager(settingsManager);
-    pipWindowManager.setWebSocketManager(websocketManager);
-    trayManager = new TrayManager(settingsManager);
-    // ipcHandlers verrà inizializzato dopo la creazione della finestra
-  }
-
-  // Configura i callback per gli eventi
-  function setupEventCallbacks() {
-    websocketManager.setEventCallbacks({
-      onSensorEvent: (eventData) => {
-        const dndMode = trayManager.getDndMode();
-        if (dndMode || isSystemLocked) {
-          return;
-        }
-        pipWindowManager.handleSensorEvent(eventData);
-      },
-      onConnectionStatusChange: (isConnected) => {
-        isWebSocketConnected = isConnected;
-        mainWindow.webContents.send("connection-status-changed", isConnected);
-      },
-    });
-
-    trayManager.setEventCallbacks({
-      onDndModeChange: (dndMode) => {
-        mainWindow.webContents.send("dnd-mode-changed", dndMode);
-      },
-      onQuit: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    });
-  }
-
-  // Eventi dell'applicazione
+if (!gotTheLock) {
+  // Se un'altra istanza è già in esecuzione, esci
+  app.quit();
+} else {
   // Esegui il codice solo se abbiamo il lock dell'istanza singola
   app.whenReady().then(() => {
     try {
-      // Gestione istanza singola
-      gotTheLock = app.requestSingleInstanceLock();
-
-      if (!gotTheLock) {
-        // Se un'altra istanza è già in esecuzione, esci
-        app.quit();
-        return;
-      }
-
       // Ascolta per eventi di seconda istanza
       app.on('second-instance', (event, commandLine, workingDirectory) => {
         // Qualcuno ha tentato di eseguire una seconda istanza, dovremmo focalizzare la nostra finestra
@@ -259,3 +258,4 @@ let isSystemLocked = false;
   process.on("unhandledRejection", (reason) => {
     console.error("Rejection non gestita:", reason);
   });
+}

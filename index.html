@@ -105,6 +105,28 @@
                   <option value="custom">Personalizzata</option>
                 </select>
               </div>
+
+              <div class="form-group">
+                <label>Margini Finestre PiP (px)</label>
+                <div class="margin-inputs">
+                  <div class="input-group">
+                    <label for="margin-top">Alto</label>
+                    <input type="number" id="margin-top" min="0" max="200" value="20" />
+                  </div>
+                  <div class="input-group">
+                    <label for="margin-right">Destra</label>
+                    <input type="number" id="margin-right" min="0" max="200" value="20" />
+                  </div>
+                  <div class="input-group">
+                    <label for="margin-bottom">Basso</label>
+                    <input type="number" id="margin-bottom" min="0" max="200" value="20" />
+                  </div>
+                  <div class="input-group">
+                    <label for="margin-left">Sinistra</label>
+                    <input type="number" id="margin-left" min="0" max="200" value="20" />
+                  </div>
+                </div>
+              </div>
               <div id="custom-size-container" class="form-group" style="display: none">
                 <label>Dimensioni personalizzate (px)</label>
                 <div class="custom-size-inputs">
@@ -117,17 +139,6 @@
                     <input type="number" id="custom-height" min="100" max="1080" value="240" />
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div class="card">
-              <h2>Avvio Automatico</h2>
-              <div class="toggle-container">
-                <label class="toggle-switch">
-                  <input type="checkbox" id="auto-start" />
-                  <span class="slider"></span>
-                </label>
-                <span>Avvia automaticamente all'avvio del sistema</span>
               </div>
             </div>
 
