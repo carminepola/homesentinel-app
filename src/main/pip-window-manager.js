@@ -169,11 +169,11 @@ class PiPWindowManager {
         // Move to position after this window
         currentY = windowBounds.y + size.height + 15;
       } else {
-        // For bottom positions, check if currentY is after this window
-        if (currentY >= windowBounds.y + windowBounds.height + 15) {
+        // For bottom positions, check if currentY is above this window
+        if (currentY + windowHeight <= windowBounds.y - 15) {
           break; // Found a gap
         }
-        // Move to position before this window
+        // Move to position before this window (above it)
         currentY = windowBounds.y - windowHeight - 15;
       }
     }
@@ -316,19 +316,23 @@ class PiPWindowManager {
       // Ricalcola la posizione di ogni finestra
       const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
       const margin = appConfig.margin;
-
-      let currentY = position.includes("top") ? margin : screenHeight - margin;
       const direction = position.includes("top") ? 1 : -1;
+
+      // Sort windows by their current Y position (already done above)
+      // For bottom positions, we need to reverse the sort so the bottom-most window is first
+      if (direction === -1) {
+        windows.reverse();
+      }
+
+      // Calculate initial Y position based on the first window's size
+      const firstWindowSettings = this.windowSettingsMap.get(windows[0].id);
+      const firstWindowSize = this.getCameraSize(firstWindowSettings?.size, firstWindowSettings);
+      let currentY = position.includes("top") ? margin : screenHeight - firstWindowSize.height - margin;
 
       windows.forEach((window) => {
         const settings = this.windowSettingsMap.get(window.id);
         const size = this.getCameraSize(settings?.size, settings);
         const { width: windowWidth, height: windowHeight } = size;
-
-        if (direction === -1) {
-          // Per posizioni bottom, inizia dal basso
-          currentY = screenHeight - windowHeight - margin;
-        }
 
         // Calcola la posizione X
         let x;
