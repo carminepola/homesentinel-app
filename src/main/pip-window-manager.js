@@ -386,7 +386,7 @@ class PiPWindowManager {
     }
 
     const settings = this.settingsManager.getSettings();
-    let finalCameraUrl = mapping.cameraUrl;
+    let finalCameraUrl = null;
 
     if (mapping.cameraId) {
       if (!this.websocketManager) {
@@ -401,8 +401,6 @@ class PiPWindowManager {
         console.error("Impossibile ottenere l'URL della camera");
         return;
       }
-    } else if (mapping.cameraUrl) {
-      finalCameraUrl = mapping.cameraUrl;
     }
 
     if (!finalCameraUrl) {
@@ -416,19 +414,12 @@ class PiPWindowManager {
       existingWindow = this.findWindowByCameraId(mapping.cameraId);
     }
 
-    if (!existingWindow && finalCameraUrl) {
-      existingWindow = this.findWindowByCameraUrl(finalCameraUrl);
-    }
-
     if (existingWindow && !existingWindow.isDestroyed()) {
       this.restartWindowTimer(existingWindow, mapping.duration || settings.pipSettings.defaultDuration);
       return;
     }
 
-    // Handle multi-event mode
-    if (settings.pipSettings.multiEventMode === "replace" && this.pipWindows.length > 0) {
-      this.closeAllPiPWindows();
-    }
+    // Always use cascade mode - multiple windows can be displayed simultaneously
 
     const cameraSettings = mapping.cameraSettings || {};
     if (!cameraSettings.position) {

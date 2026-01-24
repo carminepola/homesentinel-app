@@ -324,7 +324,6 @@ class MappingManager {
     }
 
     this.cameraSelect.value = mapping.cameraId || "";
-    document.getElementById("camera-url").value = mapping.cameraId ? "" : mapping.cameraUrl;
     document.getElementById("mapping-duration").value = mapping.duration;
     
     // Gestisci le dimensioni personalizzate
@@ -348,14 +347,12 @@ class MappingManager {
   resetModalForm() {
     this.sensorSelect.value = "";
     this.cameraSelect.value = "";
-    document.getElementById("camera-url").value = "";
     document.getElementById("mapping-duration").value = "10";
     document.getElementById("mapping-size").value = "medium";
   }
 
   // Salva la mappatura sensore-telecamera
   async saveSensorMapping() {
-    const cameraUrl = document.getElementById("camera-url").value;
     const cameraId = this.cameraSelect.value;
     const duration = parseInt(document.getElementById("mapping-duration").value);
     const sizeSelect = document.getElementById("mapping-size").value;
@@ -379,10 +376,9 @@ class MappingManager {
       return;
     }
 
-    // Non salviamo più l'URL completo con il token, ma solo l'ID della camera
-    // L'URL con il token verrà generato dinamicamente quando necessario
-    if (!cameraUrl && !cameraId) {
-      this.showNotification("Seleziona una telecamera o inserisci un URL", "error");
+    // È necessario selezionare una telecamera
+    if (!cameraId) {
+      this.showNotification("Seleziona una telecamera", "error");
       return;
     }
 
@@ -409,7 +405,6 @@ class MappingManager {
       id: this.editingMappingId || Date.now().toString(),
       sensorId,
       cameraId,
-      cameraUrl: cameraUrl, // Salviamo solo l'URL personalizzato (senza token)
       duration,
       cameraSettings,
     };

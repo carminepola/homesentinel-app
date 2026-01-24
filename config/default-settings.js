@@ -8,7 +8,6 @@ const defaultSettings = {
   pipSettings: {
     defaultDuration: 10,
     position: "top-right",
-    multiEventMode: "cascade",
     size: "medium",
   },
   streamingSettings: {

@@ -7,7 +7,7 @@ Un'applicazione Electron per monitorare i sensori di Home Assistant e visualizza
 - **Connessione WebSocket con Home Assistant**: Ascolta gli eventi dei sensori `binary_sensor` e `input_boolean`
 - **Visualizzazione PiP**: Mostra flussi video delle telecamere in finestre ridimensionabili e trascinabili
 - **Configurazione Flessibile**: Associa più sensori a diverse telecamere con impostazioni personalizzate
-- **Gestione Multi-Eventi**: Scegli tra modalità cascata o sostituzione per più eventi simultanei
+- **Gestione Multi-Eventi**: Mostra più finestre in cascata per eventi simultanei
 - **Tema Chiaro/Scuro**: Interfaccia minimalista con tema automatico o manuale
 - **Modalità Non Disturbare**: Disattiva temporaneamente le notifiche video
 - **Test Integrato**: Verifica il funzionamento delle telecamere direttamente dall'app
@@ -64,9 +64,7 @@ npm start
 
 - **Durata predefinita**: Secondi di visualizzazione del video (default: 10s)
 - **Posizione iniziale**: Dove appariranno le finestre PiP
-- **Modalità multi-evento**:
-  - _Cascata_: Mostra più finestre una sopra l'altra
-  - _Sostituisci_: Chiude la finestra esistente e ne apre una nuova
+- **Modalità multi-evento**: Mostra più finestre in cascata (modalità predefinita)
 - **Audio predefinito**: Abilita/disabilita l'audio di default
 - **Dimensione predefinita**: Formato video (piccolo, medio, grande, quadrato, orizzontale, verticale)
 

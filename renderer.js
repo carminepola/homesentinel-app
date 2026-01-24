@@ -190,8 +190,6 @@ function updateUIFromSettings() {
   const pipPosition = document.getElementById("pip-position");
   if (pipPosition) pipPosition.value = appSettings.pipSettings?.position || "top-right";
 
-  const multiEventMode = document.getElementById("multi-event-mode");
-  if (multiEventMode) multiEventMode.value = appSettings.pipSettings?.multiEventMode || "cascade";
 
   const defaultSize = document.getElementById("default-size");
   if (defaultSize) defaultSize.value = appSettings.pipSettings?.size || "medium";
@@ -224,7 +222,7 @@ async function saveSettings() {
     pipSettings: {
       defaultDuration: parseInt(document.getElementById("pip-duration")?.value || 10),
       position: document.getElementById("pip-position")?.value || "top-right",
-      multiEventMode: document.getElementById("multi-event-mode")?.value || "cascade",
+      multiEventMode: "cascade", // Always use cascade mode
       size: document.getElementById("default-size")?.value || "medium",
     },
     streamingSettings: {
