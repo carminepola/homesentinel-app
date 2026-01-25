@@ -136,6 +136,100 @@
         animateWindowOpen();
       });
 
+      // Variabili per tracciare lo stato del mouse
+      let mouseOverWindow = false;
+      let mouseLeaveTimer = null;
+      let lastPauseTime = 0;
+
+      // Funzione per forzare la ripresa del timer con controlli multipli
+      const forceResumeTimer = () => {
+        console.log("🔄 Forzando ripresa timer - controlli multipli");
+
+        // Controlla 1: verifica se il mouse è effettivamente sopra la finestra
+        const isHovering = pipContainer.matches(":hover") || document.documentElement.matches(":hover") || document.body.matches(":hover");
+
+        // Controlla 2: verifica la posizione del mouse se disponibile
+        let mouseX = -1,
+          mouseY = -1;
+        if (typeof MouseEvent !== "undefined") {
+          try {
+            // Prova a ottenere la posizione del mouse
+            mouseX = window.event ? window.event.clientX : -1;
+            mouseY = window.event ? window.event.clientY : -1;
+          } catch (e) {
+            // Ignora errori
+          }
+        }
+
+        // Controlla 3: verifica se è passato troppo tempo dall'ultima pausa
+        const timeSincePause = Date.now() - lastPauseTime;
+
+        // Forza la ripresa se:
+        // 1. Il mouse non è sopra la finestra E
+        // 2. È passato più di 1 secondo dall'ultima pausa OPPURE il mouse è fuori dai limiti
+        if (!isHovering && (timeSincePause > 1000 || (mouseX >= 0 && (mouseX < 0 || mouseX > window.innerWidth || mouseY < 0 || mouseY > window.innerHeight)))) {
+          console.log("✅ Condizioni soddisfatte, riprendo il timer");
+          resumeTimer();
+        } else {
+          console.log("❌ Condizioni non soddisfatte, timer rimane in pausa");
+        }
+      };
+
+      // Eventi per il tracciamento del mouse usando eventi nativi
+      document.addEventListener("mouseover", (e) => {
+        // Controlla se il mouse è entrato nella finestra (non da un elemento figlio)
+        if (e.target === document.documentElement || e.target === document.body) {
+          if (!mouseOverWindow) {
+            mouseOverWindow = true;
+            lastPauseTime = Date.now();
+            console.log("🖱️ Mouse entrato nella finestra (mouseover)");
+            pauseTimer();
+          }
+        }
+      });
+
+      document.addEventListener("mouseout", (e) => {
+        // Controlla se il mouse è uscito dalla finestra
+        if (e.target === document.documentElement || e.target === document.body) {
+          mouseOverWindow = false;
+          console.log("🖱️ Mouse uscito dalla finestra (mouseout)");
+          // Usa un piccolo timeout per evitare falsi positivi
+          mouseLeaveTimer = setTimeout(forceResumeTimer, 200);
+        }
+      });
+
+      // Aggiungi event listener per quando il mouse lascia completamente la finestra
+      document.addEventListener("mouseleave", () => {
+        mouseOverWindow = false;
+        console.log("🖱️ Mouse lasciato completamente la finestra (mouseleave)");
+        if (mouseLeaveTimer) {
+          clearTimeout(mouseLeaveTimer);
+        }
+        mouseLeaveTimer = setTimeout(forceResumeTimer, 200);
+      });
+
+      // Fallback 1: controlla ogni 1.5 secondi se il mouse è sulla finestra usando :hover
+      setInterval(() => {
+        const isHovering = pipContainer.matches(":hover") || document.documentElement.matches(":hover") || document.body.matches(":hover");
+
+        if (isHovering && !mouseOverWindow) {
+          mouseOverWindow = true;
+          lastPauseTime = Date.now();
+          pauseTimer();
+        } else if (!isHovering && mouseOverWindow) {
+          mouseOverWindow = false;
+          forceResumeTimer();
+        }
+      }, 1500);
+
+      // Fallback 2: controllo di sicurezza ogni 3 secondi per garantire che il timer non rimanga bloccato
+      setInterval(() => {
+        if (isTimerPaused) {
+          console.log("🚨 Controllo di sicurezza: timer in pausa, provo a sbloccare");
+          forceResumeTimer();
+        }
+      }, 3000);
+
       function loadCamera(config) {
         console.log("Caricamento camera con config:", config);
         const { url, duration, useHLS, streamType } = config;
@@ -464,16 +558,6 @@
         pipContainer.addEventListener("contextmenu", (e) => {
           e.preventDefault();
         });
-
-        // Pausa il timer quando il mouse entra nella finestra PiP
-        pipContainer.addEventListener("mouseenter", () => {
-          pauseTimer();
-        });
-
-        // Riprendi il timer quando il mouse esce dalla finestra PiP
-        pipContainer.addEventListener("mouseleave", () => {
-          resumeTimer();
-        });
       }
 
       function toggleMute() {
@@ -595,20 +679,26 @@
       }
 
       function pauseTimer() {
-        if (isTimerPaused) return;
+        if (isTimerPaused) {
+          console.log("⚠️ Timer già in pausa, ignoro richiesta");
+          return;
+        }
         isTimerPaused = true;
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
-        console.log("⏸️ Timer in pausa (hover attivo)");
+        console.log("⏸️ Timer in pausa (hover attivo) - Tempo rimanente:", remainingTime);
         // Mostra indicazione visiva che il timer è in pausa
         timerText.textContent = `${remainingTime}s (PAUSA)`;
         timerBar.style.backgroundColor = "#2196f3";
       }
 
       function resumeTimer() {
-        if (!isTimerPaused) return;
+        if (!isTimerPaused) {
+          console.log("⚠️ Timer non in pausa, ignoro richiesta di ripresa");
+          return;
+        }
         isTimerPaused = false;
-        console.log("▶️ Timer ripreso (hover disattivato)");
+        console.log("▶️ Timer ripreso (hover disattivato) - Tempo rimanente:", remainingTime);
         updateTimerDisplay();
         startTimer();
       }

@@ -34,7 +34,8 @@ const appConfig = {
     resizable: true,
     skipTaskbar: true,
     backgroundColor: "#000000",
-    focusable: false,
+    focusable: true,
+    acceptFirstMouse: true,
   },
 
   // Configurazione WebSocket
