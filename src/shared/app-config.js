@@ -34,7 +34,7 @@ const appConfig = {
     resizable: true,
     skipTaskbar: true,
     backgroundColor: "#000000",
-    focusable: true,
+    focusable: false,
     acceptFirstMouse: true,
   },
 
@@ -51,14 +51,11 @@ const appConfig = {
     endpoint: "/api/camera_proxy_stream",
     // Timeout per la richiesta HLS (in millisecondi)
     timeout: 5000,
-    maxBufferLength: 10,     // Secondi di video da tenere in memoria
-    maxMaxBufferLength: 30,  // Massimo buffer consentito
-    startLevel: 0,           // Parte dalla qualità più bassa per evitare blocchi iniziali
-    abrEwmaDefaultEstimate: 500000
-
+    maxBufferLength: 10, // Secondi di video da tenere in memoria
+    maxMaxBufferLength: 30, // Massimo buffer consentito
+    startLevel: 0, // Parte dalla qualità più bassa per evitare blocchi iniziali
+    abrEwmaDefaultEstimate: 500000,
   },
-
-
 
   // Dimensioni predefinite per le finestre PiP
   pipSizes: {

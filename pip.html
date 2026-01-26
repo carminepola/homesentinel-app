@@ -76,6 +76,21 @@
             <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
           </svg>
         </button>
+
+        <!-- Pulsante timer lock (clessidra) -->
+        <button id="timer-lock-btn" class="timer-lock-btn" title="Blocca/Sblocca Timer">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v4"></path>
+            <path d="m16.2 7.8 2.9-2.9"></path>
+            <path d="M18 12h4"></path>
+            <path d="m16.2 16.2 2.9 2.9"></path>
+            <path d="M12 18v4"></path>
+            <path d="m4.9 19.1 2.9-2.9"></path>
+            <path d="M2 12h4"></path>
+            <path d="m4.9 4.9 2.9 2.9"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
       </div>
 
       <div class="pip-timer">
@@ -101,6 +116,7 @@
       const audioBtn = document.getElementById("audio-btn");
       const timerBar = document.getElementById("timer-bar");
       const timerText = document.getElementById("timer-text");
+      const timerLockBtn = document.getElementById("timer-lock-btn");
 
       // Stato
       let isMuted = true;
@@ -109,6 +125,7 @@
       let totalTime = 10;
       let fallbackTimeout;
       let isTimerPaused = false;
+      let isTimerLocked = false; // Stato del blocco del timer tramite pulsante
       // Inizializzazione ottimizzata
       document.addEventListener("DOMContentLoaded", () => {
         // Setup immediato degli event listener critici
@@ -135,100 +152,6 @@
       ipcRenderer.on("window-open-anim", () => {
         animateWindowOpen();
       });
-
-      // Variabili per tracciare lo stato del mouse
-      let mouseOverWindow = false;
-      let mouseLeaveTimer = null;
-      let lastPauseTime = 0;
-
-      // Funzione per forzare la ripresa del timer con controlli multipli
-      const forceResumeTimer = () => {
-        console.log("🔄 Forzando ripresa timer - controlli multipli");
-
-        // Controlla 1: verifica se il mouse è effettivamente sopra la finestra
-        const isHovering = pipContainer.matches(":hover") || document.documentElement.matches(":hover") || document.body.matches(":hover");
-
-        // Controlla 2: verifica la posizione del mouse se disponibile
-        let mouseX = -1,
-          mouseY = -1;
-        if (typeof MouseEvent !== "undefined") {
-          try {
-            // Prova a ottenere la posizione del mouse
-            mouseX = window.event ? window.event.clientX : -1;
-            mouseY = window.event ? window.event.clientY : -1;
-          } catch (e) {
-            // Ignora errori
-          }
-        }
-
-        // Controlla 3: verifica se è passato troppo tempo dall'ultima pausa
-        const timeSincePause = Date.now() - lastPauseTime;
-
-        // Forza la ripresa se:
-        // 1. Il mouse non è sopra la finestra E
-        // 2. È passato più di 1 secondo dall'ultima pausa OPPURE il mouse è fuori dai limiti
-        if (!isHovering && (timeSincePause > 1000 || (mouseX >= 0 && (mouseX < 0 || mouseX > window.innerWidth || mouseY < 0 || mouseY > window.innerHeight)))) {
-          console.log("✅ Condizioni soddisfatte, riprendo il timer");
-          resumeTimer();
-        } else {
-          console.log("❌ Condizioni non soddisfatte, timer rimane in pausa");
-        }
-      };
-
-      // Eventi per il tracciamento del mouse usando eventi nativi
-      document.addEventListener("mouseover", (e) => {
-        // Controlla se il mouse è entrato nella finestra (non da un elemento figlio)
-        if (e.target === document.documentElement || e.target === document.body) {
-          if (!mouseOverWindow) {
-            mouseOverWindow = true;
-            lastPauseTime = Date.now();
-            console.log("🖱️ Mouse entrato nella finestra (mouseover)");
-            pauseTimer();
-          }
-        }
-      });
-
-      document.addEventListener("mouseout", (e) => {
-        // Controlla se il mouse è uscito dalla finestra
-        if (e.target === document.documentElement || e.target === document.body) {
-          mouseOverWindow = false;
-          console.log("🖱️ Mouse uscito dalla finestra (mouseout)");
-          // Usa un piccolo timeout per evitare falsi positivi
-          mouseLeaveTimer = setTimeout(forceResumeTimer, 200);
-        }
-      });
-
-      // Aggiungi event listener per quando il mouse lascia completamente la finestra
-      document.addEventListener("mouseleave", () => {
-        mouseOverWindow = false;
-        console.log("🖱️ Mouse lasciato completamente la finestra (mouseleave)");
-        if (mouseLeaveTimer) {
-          clearTimeout(mouseLeaveTimer);
-        }
-        mouseLeaveTimer = setTimeout(forceResumeTimer, 200);
-      });
-
-      // Fallback 1: controlla ogni 1.5 secondi se il mouse è sulla finestra usando :hover
-      setInterval(() => {
-        const isHovering = pipContainer.matches(":hover") || document.documentElement.matches(":hover") || document.body.matches(":hover");
-
-        if (isHovering && !mouseOverWindow) {
-          mouseOverWindow = true;
-          lastPauseTime = Date.now();
-          pauseTimer();
-        } else if (!isHovering && mouseOverWindow) {
-          mouseOverWindow = false;
-          forceResumeTimer();
-        }
-      }, 1500);
-
-      // Fallback 2: controllo di sicurezza ogni 3 secondi per garantire che il timer non rimanga bloccato
-      setInterval(() => {
-        if (isTimerPaused) {
-          console.log("🚨 Controllo di sicurezza: timer in pausa, provo a sbloccare");
-          forceResumeTimer();
-        }
-      }, 3000);
 
       function loadCamera(config) {
         console.log("Caricamento camera con config:", config);
@@ -553,6 +476,7 @@
         closeBtn.addEventListener("click", closeWindow);
         floatingCloseBtn.addEventListener("click", closeWindow);
         audioBtn.addEventListener("click", toggleMute);
+        timerLockBtn.addEventListener("click", toggleTimerLock);
 
         // Previeni il menu contestuale
         pipContainer.addEventListener("contextmenu", (e) => {
@@ -564,6 +488,24 @@
         isMuted = !isMuted;
         pipVideo.muted = isMuted;
         updateMuteButton();
+      }
+
+      function toggleTimerLock() {
+        isTimerLocked = !isTimerLocked;
+
+        if (isTimerLocked) {
+          // Blocca il timer
+          pauseTimer();
+          // Aggiorna lo stile del pulsante per mostrare che è bloccato
+          timerLockBtn.classList.add("locked");
+          timerLockBtn.title = "Sblocca Timer";
+        } else {
+          // Sblocca il timer
+          resumeTimer();
+          // Aggiorna lo stile del pulsante per mostrare che è sbloccato
+          timerLockBtn.classList.remove("locked");
+          timerLockBtn.title = "Blocca Timer";
+        }
       }
 
       function updateMuteButton() {
@@ -686,10 +628,15 @@
         isTimerPaused = true;
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
-        console.log("⏸️ Timer in pausa (hover attivo) - Tempo rimanente:", remainingTime);
-        // Mostra indicazione visiva che il timer è in pausa
-        timerText.textContent = `${remainingTime}s (PAUSA)`;
-        timerBar.style.backgroundColor = "#2196f3";
+        console.log("⏸️ Timer in pausa - Tempo rimanente:", remainingTime);
+        // Mostra indicazione visiva che il timer è in pausa/bloccato
+        if (isTimerLocked) {
+          timerText.textContent = `${remainingTime}s (BLOCCATO)`;
+          timerBar.style.backgroundColor = "#ff5722";
+        } else {
+          timerText.textContent = `${remainingTime}s (PAUSA)`;
+          timerBar.style.backgroundColor = "#2196f3";
+        }
       }
 
       function resumeTimer() {
@@ -697,8 +644,13 @@
           console.log("⚠️ Timer non in pausa, ignoro richiesta di ripresa");
           return;
         }
+        // Se il timer è bloccato manualmente, non riprendere
+        if (isTimerLocked) {
+          console.log("⚠️ Timer bloccato manualmente, non riprendo");
+          return;
+        }
         isTimerPaused = false;
-        console.log("▶️ Timer ripreso (hover disattivato) - Tempo rimanente:", remainingTime);
+        console.log("▶️ Timer ripreso - Tempo rimanente:", remainingTime);
         updateTimerDisplay();
         startTimer();
       }
