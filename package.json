@@ -50,7 +50,9 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "rpm",
+        "deb"
       ],
       "icon": "assets/icon.png",
       "category": "Utility"
