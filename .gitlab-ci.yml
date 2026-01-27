@@ -1,4 +1,4 @@
-image: electronuserland/builder:latest
+image: electronuserland/builder:wine
 
 stages:
   - build
