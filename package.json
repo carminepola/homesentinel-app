@@ -54,7 +54,7 @@
         "rpm",
         "deb"
       ],
-      "icon": "build/icons/*",
+      "icon": "assets/icons",
       "category": "Utility"
     }
   },
