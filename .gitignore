@@ -8,8 +8,12 @@ yarn.lock
 
 # Build outputs
 dist/
-build/
 out/
+
+# Ignore build directory but keep icons
+build/*
+!build/icons
+build/icons/*
 
 # Electron specific
 app/

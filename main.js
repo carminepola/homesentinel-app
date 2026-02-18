@@ -6,6 +6,7 @@ const SettingsManager = require("./src/shared/settings-manager");
 const WebSocketManager = require("./src/main/websocket-manager");
 const PiPWindowManager = require("./src/main/pip-window-manager");
 const TrayManager = require("./src/main/tray-manager");
+const AutoStartManager = require("./src/main/auto-start-manager");
 const IPCHandlers = require("./src/main/ipc-handlers");
 const appConfig = require("./src/shared/app-config");
 
@@ -16,6 +17,7 @@ let settingsManager;
 let websocketManager;
 let pipWindowManager;
 let trayManager;
+let autoStartManager;
 let ipcHandlers;
 let isWebSocketConnected = false;
 let isSystemLocked = false;
@@ -108,6 +110,7 @@ function initializeManagers() {
   pipWindowManager = new PiPWindowManager(settingsManager);
   pipWindowManager.setWebSocketManager(websocketManager);
   trayManager = new TrayManager(settingsManager);
+  autoStartManager = new AutoStartManager(settingsManager);
   // ipcHandlers verrà inizializzato dopo la creazione della finestra
 }
 
@@ -178,7 +181,7 @@ if (!gotTheLock) {
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
-      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager);
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager);
 
       setupEventCallbacks();
 
@@ -209,6 +212,10 @@ if (!gotTheLock) {
 
       // Crea la tray prima di connettersi a WebSocket per evitare che l'app si chiuda
       trayManager.createTray();
+
+      // Sincronizza l'impostazione di auto-start
+      autoStartManager.syncAutoStart();
+
       websocketManager.connectToHomeAssistant();
     } catch (error) {
       console.error("Errore durante l'inizializzazione dell'applicazione:", error);

@@ -1,11 +1,12 @@
 const { ipcMain, dialog } = require("electron");
 
 class IPCHandlers {
-  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager) {
+  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager) {
     this.mainWindow = mainWindow;
     this.settingsManager = settingsManager;
     this.websocketManager = websocketManager;
     this.pipWindowManager = pipWindowManager;
+    this.autoStartManager = autoStartManager;
 
     this.setupIpcHandlers();
   }
@@ -50,6 +51,14 @@ class IPCHandlers {
     ipcMain.handle("get-camera-url-with-token", async (event, cameraId) => {
       return this.handleGetCameraUrlWithToken(cameraId);
     });
+
+    ipcMain.handle("set-auto-start", async (event, enabled) => {
+      return this.handleSetAutoStart(enabled);
+    });
+
+    ipcMain.handle("get-auto-start-status", async () => {
+      return this.handleGetAutoStartStatus();
+    });
   }
 
   async handleSaveSettings(settings) {
@@ -58,6 +67,12 @@ class IPCHandlers {
 
     if (!this.settingsManager.saveSettingsToFile()) {
       throw new Error("Impossibile salvare le impostazioni su file");
+    }
+
+    // Gestisci l'avvio automatico se modificato
+    const autoStartChanged = oldSettings.autoStart !== settings.autoStart;
+    if (autoStartChanged && this.autoStartManager) {
+      await this.autoStartManager.setAutoStart(settings.autoStart);
     }
 
     const haSettingsChanged = oldSettings.homeAssistantUrl !== settings.homeAssistantUrl ||
@@ -230,6 +245,41 @@ class IPCHandlers {
       return { url: cameraUrl, useHLS };
     } catch (error) {
       return { error: error.message };
+    }
+  }
+
+  async handleSetAutoStart(enabled) {
+    if (!this.autoStartManager) {
+      return { success: false, error: "Auto-start manager non inizializzato" };
+    }
+
+    try {
+      const result = await this.autoStartManager.setAutoStart(enabled);
+
+      if (result) {
+        // Aggiorna anche le impostazioni
+        const settings = this.settingsManager.getSettings();
+        settings.autoStart = enabled;
+        this.settingsManager.updateSettings(settings);
+        this.settingsManager.saveSettingsToFile();
+      }
+
+      return { success: result };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleGetAutoStartStatus() {
+    if (!this.autoStartManager) {
+      return { enabled: false };
+    }
+
+    try {
+      const enabled = await this.autoStartManager.isAutoStartEnabled();
+      return { enabled };
+    } catch (error) {
+      return { enabled: false, error: error.message };
     }
   }
 }

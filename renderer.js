@@ -34,6 +34,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Imposta i valori iniziali
   updateUIFromSettings();
 
+  // Carica lo stato dell'avvio automatico
+  await loadAutoStartStatus();
+
   // Carica i dispositivi Home Assistant se configurato
   if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
     await loadHomeAssistantDevices();
@@ -66,6 +69,27 @@ function setupEventListeners() {
     darkModeToggle.addEventListener("change", () => {
       const newTheme = darkModeToggle.checked ? "dark" : "light";
       themeManager.setTheme(newTheme);
+    });
+  }
+
+  // Event listener per il toggle avvio automatico
+  const autoStartToggle = document.getElementById("auto-start-toggle");
+  if (autoStartToggle) {
+    autoStartToggle.addEventListener("change", async () => {
+      const enabled = autoStartToggle.checked;
+      try {
+        const result = await ipcRenderer.invoke("set-auto-start", enabled);
+        if (!result.success) {
+          console.error("Errore nell'impostazione dell'avvio automatico:", result.error);
+          // Ripristina lo stato precedente se c'è stato un errore
+          autoStartToggle.checked = !enabled;
+          alert(`Impossibile ${enabled ? "attivare" : "disattivare"} l'avvio automatico: ${result.error}`);
+        }
+      } catch (error) {
+        console.error("Errore nell'impostazione dell'avvio automatico:", error);
+        autoStartToggle.checked = !enabled;
+        alert(`Errore nell'impostazione dell'avvio automatico: ${error.message}`);
+      }
     });
   }
 
@@ -208,7 +232,7 @@ function updateUIFromSettings() {
   if (marginLeft) marginLeft.value = appSettings.pipSettings?.margins?.left || 20;
 
   // Auto start
-  const autoStart = document.getElementById("auto-start");
+  const autoStart = document.getElementById("auto-start-toggle");
   if (autoStart) autoStart.checked = appSettings.autoStart || false;
 
   // HLS streaming
@@ -231,7 +255,7 @@ async function saveSettings() {
   const newSettings = {
     homeAssistantUrl: document.getElementById("ha-url")?.value || "",
     homeAssistantToken: document.getElementById("ha-token")?.value || "",
-    autoStart: document.getElementById("auto-start")?.checked || false,
+    autoStart: document.getElementById("auto-start-toggle")?.checked || false,
     pipSettings: {
       defaultDuration: parseInt(document.getElementById("pip-duration")?.value || 10),
       position: document.getElementById("pip-position")?.value || "top-right",
@@ -588,6 +612,19 @@ ipcRenderer.on("open-settings", () => {
     settingsTab.click();
   }
 });
+
+// Carica lo stato dell'avvio automatico
+async function loadAutoStartStatus() {
+  try {
+    const result = await ipcRenderer.invoke("get-auto-start-status");
+    const autoStartToggle = document.getElementById("auto-start-toggle");
+    if (autoStartToggle && result !== undefined) {
+      autoStartToggle.checked = result.enabled || false;
+    }
+  } catch (error) {
+    console.error("Errore nel caricamento dello stato dell'avvio automatico:", error);
+  }
+}
 
 ipcRenderer.on("dnd-mode-changed", (event, dndMode) => {
   if (dndToggle) {
