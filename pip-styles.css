@@ -36,6 +36,14 @@
   box-sizing: border-box;
 }
 
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   background-color: var(--bg-primary);
@@ -53,6 +61,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  margin: 0;
+  padding: 0;
   background-color: #000000; /* Sfondo nero opaco per rendering più rapido */
   border-radius: 4px; /* Ridotto per performance */
   overflow: hidden;

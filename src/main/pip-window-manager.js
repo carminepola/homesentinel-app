@@ -135,16 +135,16 @@ class PiPWindowManager {
   }
 
   calculatePosition(position, windowWidth, windowHeight) {
-    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+    const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().bounds;
     
     // Get margins from settings, falling back to app config defaults
     const settings = this.settingsManager.getSettings();
     const settingsMargins = settings.pipSettings?.margins || {};
     const margins = {
-      top: settingsMargins.top || appConfig.margins.top,
-      right: settingsMargins.right || appConfig.margins.right,
-      bottom: settingsMargins.bottom || appConfig.margins.bottom,
-      left: settingsMargins.left || appConfig.margins.left,
+      top: settingsMargins.top ?? appConfig.margins.top,
+      right: settingsMargins.right ?? appConfig.margins.right,
+      bottom: settingsMargins.bottom ?? appConfig.margins.bottom,
+      left: settingsMargins.left ?? appConfig.margins.left,
     };
 
     // Get existing windows in this position, sorted by their Y coordinate
@@ -323,16 +323,16 @@ class PiPWindowManager {
       });
 
       // Ricalcola la posizione di ogni finestra
-      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().bounds;
       
       // Get margins from settings, falling back to app config defaults
       const settings = this.settingsManager.getSettings();
       const settingsMargins = settings.pipSettings?.margins || {};
       const margins = {
-        top: settingsMargins.top || appConfig.margins.top,
-        right: settingsMargins.right || appConfig.margins.right,
-        bottom: settingsMargins.bottom || appConfig.margins.bottom,
-        left: settingsMargins.left || appConfig.margins.left,
+        top: settingsMargins.top ?? appConfig.margins.top,
+        right: settingsMargins.right ?? appConfig.margins.right,
+        bottom: settingsMargins.bottom ?? appConfig.margins.bottom,
+        left: settingsMargins.left ?? appConfig.margins.left,
       };
       
       const direction = position.includes("top") ? 1 : -1;
