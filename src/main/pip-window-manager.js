@@ -395,7 +395,7 @@ class PiPWindowManager {
   async handleSensorEvent(eventData) {
     const { entity_id, sensorState, previousState, mapping } = eventData;
 
-    if (sensorState !== "on" || previousState !== "off") {
+    if (!this.isActiveState(sensorState) || (previousState !== "unknown" && !this.isInactiveState(previousState))) {
       return;
     }
 
@@ -407,6 +407,7 @@ class PiPWindowManager {
 
     const settings = this.settingsManager.getSettings();
     let finalCameraUrl = null;
+    let cameraName = null;
 
     if (mapping.cameraId) {
       if (!this.websocketManager) {
@@ -423,7 +424,7 @@ class PiPWindowManager {
       }
 
       finalCameraUrl = cameraResult.url;
-      const cameraName = cameraResult.friendlyName;
+      cameraName = cameraResult.friendlyName;
     }
 
     if (!finalCameraUrl) {
@@ -604,6 +605,18 @@ class PiPWindowManager {
   // Metodo per verificare se il sistema è bloccato
   getSystemLocked() {
     return this.isSystemLocked;
+  }
+
+  isActiveState(state) {
+    if (!state) return false;
+    const activeStates = ["on", "open", "detected", "moisture", "occupied", "active", "home", "present", "unsafe", "problem"];
+    return activeStates.includes(state.toLowerCase());
+  }
+
+  isInactiveState(state) {
+    if (!state) return false;
+    const inactiveStates = ["off", "closed", "clear", "dry", "unoccupied", "inactive", "away", "not_home", "absent", "safe", "ok"];
+    return inactiveStates.includes(state.toLowerCase());
   }
 }
 
