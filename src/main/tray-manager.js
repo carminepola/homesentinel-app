@@ -8,6 +8,7 @@ class TrayManager {
     this.mainWindow = null;
     this.settingsManager = settingsManager;
     this.tray = null;
+    this.isAvailable = false;
     const settings = settingsManager.getSettings();
     this.dndMode = settings.dndMode || false;
     this.onDndModeChange = null;
@@ -25,6 +26,12 @@ class TrayManager {
 
   createTray() {
     try {
+      if (process.platform === "linux" && this._isGnomeWithoutTray()) {
+        console.log("ℹ️ GNOME rilevato senza supporto tray icon");
+        this.isAvailable = false;
+        return false;
+      }
+
       const trayIcon = this._loadTrayIcon();
       if (!trayIcon) throw new Error("Nessuna icona valida trovata");
 
@@ -48,9 +55,12 @@ class TrayManager {
         this.tray.popUpContextMenu();
       });
 
+      this.isAvailable = true;
       console.log("✅ Tray creata con successo");
+      return true;
     } catch (error) {
       console.error("❌ Errore nella creazione della tray:", error);
+      this.isAvailable = false;
       try {
         const emptyIcon = nativeImage.createEmpty();
         this.tray = new Tray(emptyIcon);
@@ -58,7 +68,14 @@ class TrayManager {
       } catch (fallbackError) {
         console.error("❌ Fallback tray fallito:", fallbackError);
       }
+      return false;
     }
+  }
+
+  _isGnomeWithoutTray() {
+    const xdgDesktop = process.env.XDG_CURRENT_DESKTOP || "";
+    const gnomeVariants = ["GNOME", "GNOME-Classic", "ubuntu:GNOME"];
+    return gnomeVariants.some(d => xdgDesktop.includes(d));
   }
 
   _loadTrayIcon() {

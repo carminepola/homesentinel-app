@@ -1,13 +1,14 @@
 const { ipcMain, dialog } = require("electron");
 
 class IPCHandlers {
-  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager) {
+  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager, onQuitCallback) {
     this.mainWindow = mainWindow;
     this.settingsManager = settingsManager;
     this.websocketManager = websocketManager;
     this.pipWindowManager = pipWindowManager;
     this.autoStartManager = autoStartManager;
     this.trayManager = trayManager;
+    this.onQuitCallback = onQuitCallback;
 
     this.setupIpcHandlers();
   }
@@ -67,6 +68,12 @@ class IPCHandlers {
 
     ipcMain.handle("get-dnd-status", () => {
       return this.handleGetDndStatus();
+    });
+
+    ipcMain.handle("quit-app", () => {
+      if (this.onQuitCallback) {
+        this.onQuitCallback();
+      }
     });
   }
 

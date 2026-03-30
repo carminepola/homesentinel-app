@@ -173,6 +173,14 @@ function setupEventListeners() {
     });
   }
 
+  // Event listener per il pulsante Esci
+  const quitBtn = document.getElementById("quit-btn");
+  if (quitBtn) {
+    quitBtn.addEventListener("click", async () => {
+      await ipcRenderer.invoke("quit-app");
+    });
+  }
+
   // Funzione per mostrare/nascondere i campi personalizzati
   function toggleCustomSizeFields(selectId, containerId) {
     const select = document.getElementById(selectId);
@@ -187,6 +195,22 @@ function setupEventListeners() {
     }
   }
 
+  // Menu hamburger
+  const menuToggleBtn = document.getElementById("menu-toggle-btn");
+  const mobileMenu = document.getElementById("mobile-menu");
+
+  if (menuToggleBtn && mobileMenu) {
+    menuToggleBtn.addEventListener("click", () => {
+      mobileMenu.classList.toggle("open");
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!mobileMenu.contains(e.target) && !menuToggleBtn.contains(e.target)) {
+        mobileMenu.classList.remove("open");
+      }
+    });
+  }
+
   // Gestione tab
   const tabButtons = document.querySelectorAll(".tab-btn");
   const tabPanes = document.querySelectorAll(".tab-pane");
@@ -195,13 +219,15 @@ function setupEventListeners() {
     button.addEventListener("click", () => {
       const tabName = button.getAttribute("data-tab");
 
-      // Rimuovi la classe active da tutti i tab e pulsanti
       tabButtons.forEach((btn) => btn.classList.remove("active"));
       tabPanes.forEach((pane) => pane.classList.remove("active"));
 
-      // Aggiungi la classe active al tab e pulsante corrente
       button.classList.add("active");
       document.getElementById(tabName).classList.add("active");
+
+      if (mobileMenu) {
+        mobileMenu.classList.remove("open");
+      }
     });
   });
 }

@@ -41,15 +41,16 @@ function createMainWindow() {
   mainWindow.loadFile(appConfig.paths.mainWindowHtml);
 
   mainWindow.once("ready-to-show", () => {
-    // Controlla se Home Assistant è configurato
     const settings = settingsManager.getSettings();
     const hasHomeAssistantConfig = settings.homeAssistantUrl && settings.homeAssistantToken;
-
-    // Mostra la finestra solo se Home Assistant non è configurato
-    // Se è configurato, rimane in tray icon
+    const hasTray = trayManager && trayManager.isAvailable;
 
     if (hasHomeAssistantConfig) {
-      mainWindow.hide();
+      if (hasTray) {
+        mainWindow.hide();
+      } else {
+        mainWindow.minimize();
+      }
     } else {
       mainWindow.show();
     }
@@ -58,11 +59,10 @@ function createMainWindow() {
   mainWindow.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
-      mainWindow.hide();
-      // Assicurati che l'app non si chiuda quando la finestra viene nascosta
-      if (process.platform !== "darwin" && trayManager && trayManager.tray) {
-        // Su Windows/Linux, mantieni l'app in esecuzione se c'è la tray
-        return;
+      if (trayManager && trayManager.isAvailable) {
+        mainWindow.hide();
+      } else {
+        mainWindow.minimize();
       }
     }
   });
@@ -153,7 +153,6 @@ if (!gotTheLock) {
     try {
       // Ascolta per eventi di seconda istanza
       app.on('second-instance', (event, commandLine, workingDirectory) => {
-        // Qualcuno ha tentato di eseguire una seconda istanza, dovremmo focalizzare la nostra finestra
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           if (!mainWindow.isVisible()) mainWindow.show();
@@ -176,11 +175,18 @@ if (!gotTheLock) {
 
       // Inizializza prima i gestori per avere accesso alle impostazioni
       initializeManagers();
+
+      // Crea la tray prima della finestra per sapere se è disponibile
+      trayManager.createTray();
+
       createMainWindow();
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
-      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager);
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager, () => {
+        isQuitting = true;
+        app.quit();
+      });
 
       setupEventCallbacks();
 
@@ -209,9 +215,6 @@ if (!gotTheLock) {
         console.log("Sistema ripreso - ripresa creazione finestre PiP");
       });
 
-      // Crea la tray prima di connettersi a WebSocket per evitare che l'app si chiuda
-      trayManager.createTray();
-
       // Sincronizza l'impostazione di auto-start
       autoStartManager.syncAutoStart();
 
@@ -223,9 +226,7 @@ if (!gotTheLock) {
 
   // Questi eventi devono essere registrati solo se abbiamo il lock dell'istanza singola
   app.on("window-all-closed", () => {
-    // On macOS, apps typically stay open even when all windows are closed
-    // On other platforms, only quit if we're not using the tray
-    if (process.platform !== "darwin" && (!trayManager || !trayManager.tray)) {
+    if (process.platform !== "darwin") {
       app.quit();
     }
   });
