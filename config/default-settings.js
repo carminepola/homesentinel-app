@@ -5,7 +5,6 @@ const defaultSettings = {
   autoStart: false,
   dndMode: false,
   sensorCameraMappings: [],
-  customCameras: [],
   pipSettings: {
     defaultDuration: 10,
     position: "top-right",

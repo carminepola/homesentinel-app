@@ -267,7 +267,7 @@ class WebSocketManager {
         try {
           const hlsUrl = await this.getHlsStreamUrl(cameraId, homeAssistantUrl);
           if (hlsUrl) {
-            return { url: hlsUrl, friendlyName };
+            return { url: hlsUrl, friendlyName, streamType: "hls" };
           }
           
           console.log(`HLS non disponibile per ${cameraId}, fallback a MJPEG`);
@@ -277,7 +277,6 @@ class WebSocketManager {
         }
       }
 
-      // Fallback a MJPEG
       let cameraUrl;
       if (cameraState.attributes?.entity_picture) {
         cameraUrl = `${homeAssistantUrl}${cameraState.attributes.entity_picture}`;
@@ -286,7 +285,7 @@ class WebSocketManager {
       } else {
         cameraUrl = `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${homeAssistantToken}`;
       }
-      return { url: cameraUrl, friendlyName };
+      return { url: cameraUrl, friendlyName, streamType: "mjpeg" };
     } catch (error) {
       console.error(`Errore nell'ottenere l'URL della camera ${cameraId}:`, error);
       return null;

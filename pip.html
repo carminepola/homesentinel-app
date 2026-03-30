@@ -230,6 +230,10 @@
             hls.attachMedia(pipVideo);
             hls.loadSource(url);
 
+            pipVideo.addEventListener("loadedmetadata", function onMeta() {
+              pipVideo.removeEventListener("loadedmetadata", onMeta);
+            });
+
             hls.on(Hls.Events.FRAG_LOADED, function () {
               if (pipLoading.style.display !== "none") {
                 pipLoading.style.display = "none";
@@ -249,17 +253,25 @@
               if (data.fatal) {
                 switch (data.type) {
                   case Hls.ErrorTypes.NETWORK_ERROR:
-                    console.error("Errore di rete HLS:", data);
-                    hls.startLoad();
-                    break;
+                    console.error("Errore di rete HLS, tentativo fallback MJPEG:", data);
+                    hls.destroy();
+                    window.hlsInstance = null;
+                    streamBadge.textContent = "MJPEG";
+                    streamBadge.dataset.type = "mjpeg";
+                    loadMjpegStream(url);
+                    return;
                   case Hls.ErrorTypes.MEDIA_ERROR:
                     console.error("Errore media HLS:", data);
                     hls.recoverMediaError();
                     break;
                   default:
-                    console.error("Errore fatale HLS:", data);
+                    console.error("Errore fatale HLS, fallback MJPEG:", data);
                     hls.destroy();
-                    break;
+                    window.hlsInstance = null;
+                    streamBadge.textContent = "MJPEG";
+                    streamBadge.dataset.type = "mjpeg";
+                    loadMjpegStream(url);
+                    return;
                 }
               }
             });
@@ -279,12 +291,10 @@
             });
 
             pipVideo.addEventListener("error", function () {
-              console.error("Errore nel caricamento del video HLS");
-              pipLoading.innerHTML = getErrorHtml(
-                "Errore nello streaming HLS",
-                "Verifica URL e connessione",
-                url
-              );
+              console.error("Errore nel caricamento del video HLS, fallback MJPEG");
+              streamBadge.textContent = "MJPEG";
+              streamBadge.dataset.type = "mjpeg";
+              loadMjpegStream(url);
             });
           } else {
             console.error("HLS non supportato in questo browser");

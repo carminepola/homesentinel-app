@@ -455,14 +455,7 @@ class PiPWindowManager {
 
         finalCameraUrl = cameraResult.url;
         cameraName = cameraResult.friendlyName;
-
-        if (mappingStreamType === "hls") {
-          resolvedStreamType = "hls";
-        } else if (mappingStreamType === "mjpeg") {
-          resolvedStreamType = "mjpeg";
-        } else {
-          resolvedStreamType = globalUseHLS ? "hls" : "mjpeg";
-        }
+        resolvedStreamType = cameraResult.streamType || "mjpeg";
       }
 
       const existingWindow = this.findWindowByCameraId(mapping.cameraId);
@@ -577,7 +570,7 @@ class PiPWindowManager {
 
         finalCameraUrl = cameraResult.url;
         cameraName = cameraResult.friendlyName;
-        resolvedStreamType = useHLS ? "hls" : "mjpeg";
+        resolvedStreamType = cameraResult.streamType || "mjpeg";
       }
     }
 
