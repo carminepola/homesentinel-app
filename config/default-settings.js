@@ -3,8 +3,9 @@ const defaultSettings = {
   homeAssistantUrl: "",
   homeAssistantToken: "",
   autoStart: false,
-  dndMode: false, // Modalità Do Not Disturb
+  dndMode: false,
   sensorCameraMappings: [],
+  customCameras: [],
   pipSettings: {
     defaultDuration: 10,
     position: "top-right",
@@ -17,7 +18,7 @@ const defaultSettings = {
     },
   },
   streamingSettings: {
-    useHLS: false, // Utilizza HLS streaming via WebSocket invece di camera_proxy_stream
+    useHLS: false,
   },
 };
 

@@ -33,6 +33,8 @@
 
         <div class="pip-overlay">
           <div class="pip-overlay-top">
+            <div class="pip-stream-badge" id="pip-stream-badge">MJPEG</div>
+
             <button id="audio-btn" class="audio-btn" title="Audio" style="display: none">
               <svg id="mute-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -89,6 +91,7 @@
       const pipLoading = document.getElementById("pip-loading");
       const pipCameraName = document.getElementById("pip-camera-name");
       const pipOverlayCameraName = document.getElementById("pip-overlay-camera-name");
+      const streamBadge = document.getElementById("pip-stream-badge");
 
       const muteIcon = document.getElementById("mute-icon");
       const unmuteIcon = document.getElementById("unmute-icon");
@@ -175,10 +178,16 @@
 
         requestAnimationFrame(() => {
           if (actualStreamType === "hls") {
+            streamBadge.textContent = "HLS";
+            streamBadge.dataset.type = "hls";
             loadHlsStream(url);
           } else if (actualStreamType === "mjpeg") {
+            streamBadge.textContent = "MJPEG";
+            streamBadge.dataset.type = "mjpeg";
             loadMjpegStream(url);
           } else {
+            streamBadge.textContent = "MP4";
+            streamBadge.dataset.type = "mp4";
             loadStandardVideo(url);
           }
         });
@@ -202,18 +211,36 @@
               debug: false,
               enableWorker: true,
               lowLatencyMode: true,
-              backBufferLength: 90,
+              backBufferLength: 3,
+              maxBufferLength: 5,
+              maxMaxBufferLength: 15,
               liveSyncDurationCount: 1,
+              liveMaxLatencyDurationCount: 3,
+              startLevel: 0,
+              startFragPrefetch: true,
+              abrEwmaDefaultEstimate: 500000,
+              manifestLoadingTimeOut: 4000,
+              manifestLoadingMaxRetry: 2,
+              levelLoadingTimeOut: 4000,
+              levelLoadingMaxRetry: 2,
+              fragLoadingTimeOut: 6000,
+              fragLoadingMaxRetry: 2,
             });
 
-            hls.loadSource(url);
             hls.attachMedia(pipVideo);
+            hls.loadSource(url);
+
+            hls.on(Hls.Events.FRAG_LOADED, function () {
+              if (pipLoading.style.display !== "none") {
+                pipLoading.style.display = "none";
+              }
+            });
 
             hls.on(Hls.Events.MANIFEST_PARSED, function () {
               console.log("Manifest HLS caricato con successo");
               pipLoading.style.display = "none";
               pipVideo.play().catch((error) => {
-                console.error("Errore nella riproduzione automatica:", error);
+                console.error("Errore nella riproduzione automatico:", error);
               });
               startTimer();
             });

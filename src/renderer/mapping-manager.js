@@ -306,6 +306,7 @@ class MappingManager {
 
     this.cameraSelect.value = mapping.cameraId || "";
     document.getElementById("mapping-duration").value = mapping.duration;
+    document.getElementById("mapping-stream-type").value = mapping.streamType || "auto";
     
     // Gestisci le dimensioni personalizzate
     const sizeSelect = document.getElementById("mapping-size");
@@ -330,6 +331,7 @@ class MappingManager {
     this.cameraSelect.value = "";
     document.getElementById("mapping-duration").value = "10";
     document.getElementById("mapping-size").value = "medium";
+    document.getElementById("mapping-stream-type").value = "auto";
   }
 
   // Salva la mappatura sensore-telecamera
@@ -386,6 +388,7 @@ class MappingManager {
       id: this.editingMappingId || Date.now().toString(),
       sensorId,
       cameraId,
+      streamType: document.getElementById("mapping-stream-type")?.value || "auto",
       duration,
       cameraSettings,
     };
@@ -444,11 +447,13 @@ class MappingManager {
 
       const sensorName = this.getSensorName(mapping.sensorId);
       const cameraName = this.getCameraName(mapping.cameraId) || "URL personalizzato";
+      const streamTypeLabels = { auto: "Auto", hls: "HLS", mjpeg: "MJPEG" };
+      const streamTypeLabel = streamTypeLabels[mapping.streamType] || "Auto";
 
       mappingElement.innerHTML = `
         <div class="sensor-mapping-info">
           <h4>${sensorName}</h4>
-          <p>Telecamera: ${cameraName} | Durata: ${mapping.duration}s | Dimensione: ${this.getSizeName(mapping.cameraSettings.size)}</p>
+          <p>Telecamera: ${cameraName} | Stream: ${streamTypeLabel} | Durata: ${mapping.duration}s | Dimensione: ${this.getSizeName(mapping.cameraSettings.size)}</p>
         </div>
         <div class="sensor-mapping-actions">
           <button class="btn-edit" data-id="${mapping.id}">Modifica</button>
@@ -494,6 +499,12 @@ class MappingManager {
   // Ottiene il nome della telecamera
   getCameraName(cameraId) {
     if (!cameraId) return null;
+
+    if (cameraId.startsWith("custom_")) {
+      const customCamera = (this.appSettings.customCameras || []).find(c => c.id === cameraId);
+      return customCamera ? customCamera.name : cameraId;
+    }
+
     const camera = this.homeAssistantDevices.cameras.find((c) => c.entity_id === cameraId);
     return camera ? camera.attributes.friendly_name || camera.entity_id : null;
   }

@@ -10,6 +10,7 @@ class PiPWindowManager {
     this.windowCameraIdMap = new Map();
     this.windowPositionMap = new Map();
     this.windowSettingsMap = new Map();
+    this.pendingCameraIds = new Set();
     this.websocketManager = null;
     this.isSystemLocked = false;
 
@@ -20,7 +21,7 @@ class PiPWindowManager {
     this.websocketManager = websocketManager;
   }
 
-  createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null) {
+  createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null) {
     if (!cameraUrl) {
       console.error("cameraUrl non fornito");
       return null;
@@ -78,17 +79,19 @@ class PiPWindowManager {
         const globalSettings = this.settingsManager.getSettings();
         const useHLS = globalSettings.streamingSettings?.useHLS || false;
 
-        // Determina il tipo di stream
-        let streamType = "mjpeg";
-        if (useHLS && (cameraUrl.includes(".m3u8") || cameraUrl.includes("/api/hls/"))) {
-          streamType = "hls";
+        let resolvedStreamType = streamType;
+        if (!resolvedStreamType) {
+          resolvedStreamType = "mjpeg";
+          if (useHLS && (cameraUrl.includes(".m3u8") || cameraUrl.includes("/api/hls/"))) {
+            resolvedStreamType = "hls";
+          }
         }
 
         pipWindow.webContents.send("load-camera", {
           url: cameraUrl,
           duration: duration || 10,
-          useHLS: useHLS,
-          streamType: streamType,
+          useHLS: resolvedStreamType === "hls",
+          streamType: resolvedStreamType,
           cameraName: cameraName,
         });
 
@@ -399,58 +402,86 @@ class PiPWindowManager {
       return;
     }
 
-    // Verifica se il sistema è bloccato prima di gestire l'evento
     if (this.isSystemLocked) {
-      console.log("Evento sensore ignorato: sistema attualmente bloccato");
       return;
     }
 
     const settings = this.settingsManager.getSettings();
-    let finalCameraUrl = null;
-    let cameraName = null;
+    const duration = mapping.duration || settings.pipSettings.defaultDuration;
 
     if (mapping.cameraId) {
-      if (!this.websocketManager) {
-        console.error("WebSocketManager non configurato");
+      const existingWindow = this.findWindowByCameraId(mapping.cameraId);
+      if (existingWindow && !existingWindow.isDestroyed()) {
+        this.restartWindowTimer(existingWindow, duration);
         return;
       }
+    }
 
-      const useHLS = settings.streamingSettings?.useHLS || false;
-      const cameraResult = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
+    let finalCameraUrl = null;
+    let cameraName = null;
+    let resolvedStreamType = null;
 
-      if (!cameraResult) {
-        console.error("Impossibile ottenere l'URL della camera");
-        return;
+    if (mapping.cameraId) {
+      const isCustom = mapping.cameraId.startsWith("custom_");
+
+      if (isCustom) {
+        const customCamera = (settings.customCameras || []).find(c => c.id === mapping.cameraId);
+        if (customCamera) {
+          finalCameraUrl = customCamera.url;
+          cameraName = customCamera.name;
+          const customStreamType = customCamera.streamType || "auto";
+          if (customStreamType === "auto") {
+            const globalUseHLS = settings.streamingSettings?.useHLS || false;
+            resolvedStreamType = globalUseHLS ? "hls" : "mjpeg";
+          } else {
+            resolvedStreamType = customStreamType;
+          }
+        }
+      } else {
+        if (!this.websocketManager) {
+          return;
+        }
+
+        const mappingStreamType = mapping.streamType || "auto";
+        const globalUseHLS = settings.streamingSettings?.useHLS || false;
+        const useHLS = mappingStreamType === "hls" ? true :
+                        mappingStreamType === "mjpeg" ? false : globalUseHLS;
+
+        const cameraResult = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
+
+        if (!cameraResult) {
+          return;
+        }
+
+        finalCameraUrl = cameraResult.url;
+        cameraName = cameraResult.friendlyName;
+
+        if (mappingStreamType === "hls") {
+          resolvedStreamType = "hls";
+        } else if (mappingStreamType === "mjpeg") {
+          resolvedStreamType = "mjpeg";
+        } else {
+          resolvedStreamType = globalUseHLS ? "hls" : "mjpeg";
+        }
       }
 
-      finalCameraUrl = cameraResult.url;
-      cameraName = cameraResult.friendlyName;
+      const existingWindow = this.findWindowByCameraId(mapping.cameraId);
+      if (existingWindow && !existingWindow.isDestroyed()) {
+        this.restartWindowTimer(existingWindow, duration);
+        return;
+      }
     }
 
     if (!finalCameraUrl) {
-      console.error("URL telecamera non valido");
       return;
     }
-
-    // Check for existing window
-    let existingWindow = null;
-    if (mapping.cameraId) {
-      existingWindow = this.findWindowByCameraId(mapping.cameraId);
-    }
-
-    if (existingWindow && !existingWindow.isDestroyed()) {
-      this.restartWindowTimer(existingWindow, mapping.duration || settings.pipSettings.defaultDuration);
-      return;
-    }
-
-    // Always use cascade mode - multiple windows can be displayed simultaneously
 
     const cameraSettings = mapping.cameraSettings || {};
     if (!cameraSettings.position) {
       cameraSettings.position = settings.pipSettings.position || "top-right";
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, mapping.duration || settings.pipSettings.defaultDuration, cameraName);
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType);
     if (result && mapping.cameraId) {
       this.windowCameraIdMap.set(result.id, mapping.cameraId);
     }
@@ -501,6 +532,7 @@ class PiPWindowManager {
   async testCamera(cameraUrl, cameraSettings, cameraId = null, duration = 5) {
     let finalCameraUrl = cameraUrl;
     let cameraName = null;
+    let resolvedStreamType = null;
 
     const globalSettings = this.settingsManager.getSettings();
     const globalPosition = globalSettings.pipSettings?.position || "top-right";
@@ -514,24 +546,46 @@ class PiPWindowManager {
     }
 
     if (cameraId) {
-      if (!this.websocketManager) {
-        console.error("WebSocketManager non configurato");
-        return;
+      const isCustom = cameraId.startsWith("custom_");
+
+      if (isCustom) {
+        const customCamera = (globalSettings.customCameras || []).find(c => c.id === cameraId);
+        if (customCamera) {
+          finalCameraUrl = customCamera.url;
+          cameraName = customCamera.name;
+          const customStreamType = customCamera.streamType || "auto";
+          if (customStreamType === "auto") {
+            const globalUseHLS = globalSettings.streamingSettings?.useHLS || false;
+            resolvedStreamType = globalUseHLS ? "hls" : "mjpeg";
+          } else {
+            resolvedStreamType = customStreamType;
+          }
+        }
+      } else {
+        if (!this.websocketManager) {
+          console.error("WebSocketManager non configurato");
+          return;
+        }
+
+        const useHLS = globalSettings.streamingSettings?.useHLS || false;
+        const cameraResult = await this.websocketManager.getCameraUrlWithToken(cameraId, globalSettings.homeAssistantUrl, globalSettings.homeAssistantToken, useHLS);
+
+        if (!cameraResult) {
+          console.error("Impossibile ottenere l'URL della camera per il test");
+          return;
+        }
+
+        finalCameraUrl = cameraResult.url;
+        cameraName = cameraResult.friendlyName;
+        resolvedStreamType = useHLS ? "hls" : "mjpeg";
       }
-
-      const useHLS = globalSettings.streamingSettings?.useHLS || false;
-      const cameraResult = await this.websocketManager.getCameraUrlWithToken(cameraId, globalSettings.homeAssistantUrl, globalSettings.homeAssistantToken, useHLS);
-
-      if (!cameraResult) {
-        console.error("Impossibile ottenere l'URL della camera per il test");
-        return;
-      }
-
-      finalCameraUrl = cameraResult.url;
-      cameraName = cameraResult.friendlyName;
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName);
+    if (!resolvedStreamType) {
+      resolvedStreamType = "mjpeg";
+    }
+
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType);
 
     if (result && cameraId) {
       this.windowCameraIdMap.set(result.id, cameraId);

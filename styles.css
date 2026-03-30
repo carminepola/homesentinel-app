@@ -968,3 +968,52 @@ input[type="password"]::placeholder {
 .status-card {
   animation: fadeIn 0.25s ease;
 }
+
+.custom-camera-item {
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--border-light);
+  transition: border-color 0.15s ease;
+}
+
+.custom-camera-item:hover {
+  border-color: var(--border);
+}
+
+.custom-camera-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.custom-camera-info h4 {
+  margin-bottom: 0.125rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.custom-camera-info p {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.custom-camera-actions {
+  display: flex;
+  gap: 0.375rem;
+  flex-shrink: 0;
+  margin-left: 1rem;
+}
+
+#custom-camera-list p {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 2rem 1rem;
+  font-size: 0.875rem;
+}

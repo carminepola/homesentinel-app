@@ -181,6 +181,35 @@ function setupEventListeners() {
     });
   }
 
+  // Custom camera event listeners
+  const addCustomCameraBtn = document.getElementById("add-custom-camera-btn");
+  if (addCustomCameraBtn) {
+    addCustomCameraBtn.addEventListener("click", () => {
+      openCustomCameraModal();
+    });
+  }
+
+  const closeCustomCameraModalBtn = document.getElementById("close-custom-camera-modal");
+  if (closeCustomCameraModalBtn) {
+    closeCustomCameraModalBtn.addEventListener("click", () => {
+      closeCustomCameraModalFn();
+    });
+  }
+
+  const cancelCustomCameraBtn = document.getElementById("cancel-custom-camera-btn");
+  if (cancelCustomCameraBtn) {
+    cancelCustomCameraBtn.addEventListener("click", () => {
+      closeCustomCameraModalFn();
+    });
+  }
+
+  const saveCustomCameraBtn = document.getElementById("save-custom-camera-btn");
+  if (saveCustomCameraBtn) {
+    saveCustomCameraBtn.addEventListener("click", async () => {
+      await saveCustomCamera();
+    });
+  }
+
   // Funzione per mostrare/nascondere i campi personalizzati
   function toggleCustomSizeFields(selectId, containerId) {
     const select = document.getElementById(selectId);
@@ -290,6 +319,8 @@ function updateUIFromSettings() {
   if (mappingManager) {
     mappingManager.updateSensorMappingsList();
   }
+
+  renderCustomCameraList();
 }
 
 async function saveSettings() {
@@ -298,6 +329,7 @@ async function saveSettings() {
     homeAssistantUrl: document.getElementById("ha-url")?.value || "",
     homeAssistantToken: document.getElementById("ha-token")?.value || "",
     autoStart: document.getElementById("auto-start-toggle")?.checked || false,
+    dndMode: appSettings.dndMode || false,
     pipSettings: {
       defaultDuration: parseInt(document.getElementById("pip-duration")?.value || 10),
       position: document.getElementById("pip-position")?.value || "top-right",
@@ -314,6 +346,7 @@ async function saveSettings() {
       useHLS: document.getElementById("use-hls")?.checked || false,
     },
     sensorCameraMappings: appSettings.sensorCameraMappings || [],
+    customCameras: appSettings.customCameras || [],
   };
 
   try {
@@ -423,11 +456,17 @@ function updateDeviceSelects() {
   if (testCameraSelect) {
     testCameraSelect.innerHTML = '<option value="">-- Seleziona una telecamera --</option>';
 
-    // Add camera options to test select
     homeAssistantDevices.cameras.forEach((camera) => {
       const option = document.createElement("option");
       option.value = camera.entity_id;
       option.textContent = camera.attributes.friendly_name || camera.entity_id;
+      testCameraSelect.appendChild(option);
+    });
+
+    (appSettings.customCameras || []).forEach((cam) => {
+      const option = document.createElement("option");
+      option.value = cam.id;
+      option.textContent = `\u2605 ${cam.name}`;
       testCameraSelect.appendChild(option);
     });
   }
@@ -435,11 +474,17 @@ function updateDeviceSelects() {
   if (cameraSelect) {
     cameraSelect.innerHTML = '<option value="">-- Seleziona una telecamera --</option>';
 
-    // Add camera options to mapping select
     homeAssistantDevices.cameras.forEach((camera) => {
       const option = document.createElement("option");
       option.value = camera.entity_id;
       option.textContent = camera.attributes.friendly_name || camera.entity_id;
+      cameraSelect.appendChild(option);
+    });
+
+    (appSettings.customCameras || []).forEach((cam) => {
+      const option = document.createElement("option");
+      option.value = cam.id;
+      option.textContent = `\u2605 ${cam.name}`;
       cameraSelect.appendChild(option);
     });
   }
@@ -613,6 +658,145 @@ async function resetSettings() {
       showNotification("Errore nel reset delle impostazioni: " + error.message, "error");
     }
   }
+}
+
+let editingCustomCameraId = null;
+
+function openCustomCameraModal(editId = null) {
+  editingCustomCameraId = editId;
+  const modal = document.getElementById("custom-camera-modal");
+  const title = modal.querySelector(".modal-header h3");
+
+  if (editId) {
+    const cam = (appSettings.customCameras || []).find(c => c.id === editId);
+    if (cam) {
+      document.getElementById("custom-camera-name").value = cam.name || "";
+      document.getElementById("custom-camera-url").value = cam.url || "";
+      document.getElementById("custom-camera-stream-type").value = cam.streamType || "auto";
+      title.textContent = "Modifica Telecamera Personalizzata";
+    }
+  } else {
+    document.getElementById("custom-camera-name").value = "";
+    document.getElementById("custom-camera-url").value = "";
+    document.getElementById("custom-camera-stream-type").value = "auto";
+    title.textContent = "Aggiungi Telecamera Personalizzata";
+  }
+
+  modal.classList.add("show");
+}
+
+function closeCustomCameraModalFn() {
+  const modal = document.getElementById("custom-camera-modal");
+  modal.classList.remove("show");
+  editingCustomCameraId = null;
+}
+
+async function saveCustomCamera() {
+  const name = document.getElementById("custom-camera-name")?.value.trim();
+  const url = document.getElementById("custom-camera-url")?.value.trim();
+  const streamType = document.getElementById("custom-camera-stream-type")?.value || "auto";
+
+  if (!name) {
+    showNotification("Inserisci il nome della telecamera", "error");
+    return;
+  }
+
+  if (!url) {
+    showNotification("Inserisci l'URL dello stream", "error");
+    return;
+  }
+
+  if (!appSettings.customCameras) {
+    appSettings.customCameras = [];
+  }
+
+  if (editingCustomCameraId) {
+    const idx = appSettings.customCameras.findIndex(c => c.id === editingCustomCameraId);
+    if (idx >= 0) {
+      appSettings.customCameras[idx] = { ...appSettings.customCameras[idx], name, url, streamType };
+    }
+  } else {
+    appSettings.customCameras.push({
+      id: `custom_${Date.now()}`,
+      name,
+      url,
+      streamType,
+    });
+  }
+
+  try {
+    await ipcRenderer.invoke("save-settings", appSettings);
+    renderCustomCameraList();
+    updateDeviceSelects();
+    if (mappingManager) {
+      mappingManager.updateSensorMappingsList();
+    }
+    closeCustomCameraModalFn();
+    showNotification(editingCustomCameraId ? "Telecamera modificata" : "Telecamera aggiunta", "success");
+  } catch (error) {
+    showNotification("Errore nel salvataggio: " + error.message, "error");
+  }
+}
+
+async function deleteCustomCamera(id) {
+  if (!confirm("Sei sicuro di voler eliminare questa telecamera personalizzata?")) return;
+
+  appSettings.customCameras = (appSettings.customCameras || []).filter(c => c.id !== id);
+
+  try {
+    await ipcRenderer.invoke("save-settings", appSettings);
+    renderCustomCameraList();
+    updateDeviceSelects();
+    if (mappingManager) {
+      mappingManager.updateSensorMappingsList();
+    }
+    showNotification("Telecamera eliminata", "success");
+  } catch (error) {
+    showNotification("Errore nell'eliminazione: " + error.message, "error");
+  }
+}
+
+function renderCustomCameraList() {
+  const list = document.getElementById("custom-camera-list");
+  if (!list) return;
+
+  const cameras = appSettings.customCameras || [];
+
+  if (cameras.length === 0) {
+    list.innerHTML = "<p>Nessuna telecamera personalizzata configurata</p>";
+    return;
+  }
+
+  list.innerHTML = "";
+  const streamTypeLabels = { auto: "Auto", hls: "HLS", mjpeg: "MJPEG", mp4: "Video Standard" };
+
+  cameras.forEach((cam) => {
+    const item = document.createElement("div");
+    item.className = "custom-camera-item";
+    item.innerHTML = `
+      <div class="custom-camera-info">
+        <h4>${cam.name}</h4>
+        <p>${cam.url} | Tipo: ${streamTypeLabels[cam.streamType] || "Auto"}</p>
+      </div>
+      <div class="custom-camera-actions">
+        <button class="btn-edit custom-camera-edit" data-id="${cam.id}">Modifica</button>
+        <button class="btn-remove custom-camera-delete" data-id="${cam.id}">Elimina</button>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+
+  list.querySelectorAll(".custom-camera-edit").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openCustomCameraModal(btn.getAttribute("data-id"));
+    });
+  });
+
+  list.querySelectorAll(".custom-camera-delete").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      deleteCustomCamera(btn.getAttribute("data-id"));
+    });
+  });
 }
 
 // IPC event listeners
