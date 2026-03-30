@@ -98,27 +98,10 @@ class MappingManager {
       input.type = "text";
       input.id = "sensor-input";
       input.placeholder = "Cerca sensore per nome...";
-      input.style.width = "100%";
-      input.style.padding = "0.75rem";
-      input.style.border = "1px solid var(--border)";
-      input.style.borderRadius = "4px";
-      input.style.backgroundColor = "var(--bg-primary)";
-      input.style.color = "var(--text-primary)";
-      input.style.fontSize = "1rem";
+      input.className = "sensor-search-input";
 
-      // Create dropdown list
       const dropdown = document.createElement("div");
       dropdown.id = "sensor-dropdown";
-      dropdown.style.position = "absolute";
-      dropdown.style.top = "100%";
-      dropdown.style.left = "0";
-      dropdown.style.right = "0";
-      dropdown.style.backgroundColor = "var(--card-bg)";
-      dropdown.style.border = "1px solid var(--border)";
-      dropdown.style.borderRadius = "4px";
-      dropdown.style.maxHeight = "200px";
-      dropdown.style.overflowY = "auto";
-      dropdown.style.zIndex = "1000";
       dropdown.style.display = "none";
 
       // Replace select with autocomplete
@@ -160,14 +143,12 @@ class MappingManager {
 
         filteredSensors.forEach((sensor) => {
           const item = document.createElement("div");
-          item.style.padding = "0.75rem";
-          item.style.cursor = "pointer";
-          item.style.borderBottom = "1px solid var(--border)";
+          item.className = "sensor-dropdown-item";
 
           const displayName = sensor.attributes.friendly_name || sensor.entity_id;
           item.innerHTML = `
-            <div style="font-weight: 500;">${displayName}</div>
-            <div style="font-size: 0.8rem; color: var(--text-secondary);">${sensor.entity_id}</div>
+            <div class="sensor-dropdown-name">${displayName}</div>
+            <div class="sensor-dropdown-id">${sensor.entity_id}</div>
           `;
 
           item.addEventListener("click", () => {
@@ -178,11 +159,11 @@ class MappingManager {
           });
 
           item.addEventListener("mouseenter", () => {
-            item.style.backgroundColor = "var(--bg-secondary)";
+            item.classList.add("hovered");
           });
 
           item.addEventListener("mouseleave", () => {
-            item.style.backgroundColor = "transparent";
+            item.classList.remove("hovered");
           });
 
           dropdown.appendChild(item);
@@ -530,56 +511,24 @@ class MappingManager {
     return sizes[size] || size;
   }
 
-  // Mostra una notifica
   showNotification(message, type = "info") {
-    // Create notification element
     const notification = document.createElement("div");
     notification.className = `notification ${type}`;
     notification.textContent = message;
 
-    // Style the notification
-    Object.assign(notification.style, {
-      position: "fixed",
-      top: "20px",
-      right: "20px",
-      padding: "12px 20px",
-      borderRadius: "4px",
-      color: "white",
-      fontWeight: "500",
-      zIndex: "9999",
-      opacity: "0",
-      transform: "translateY(-20px)",
-      transition: "all 0.3s ease",
-    });
-
-    // Set background color based on type
-    const colors = {
-      success: "#4caf50",
-      error: "#f44336",
-      warning: "#ff9800",
-      info: "#2196f3",
-    };
-
-    notification.style.backgroundColor = colors[type] || colors.info;
-
-    // Add to DOM
     document.body.appendChild(notification);
 
-    // Animate in
-    setTimeout(() => {
-      notification.style.opacity = "1";
-      notification.style.transform = "translateY(0)";
-    }, 10);
+    requestAnimationFrame(() => {
+      notification.classList.add("show");
+    });
 
-    // Remove after 3 seconds
     setTimeout(() => {
-      notification.style.opacity = "0";
-      notification.style.transform = "translateY(-20px)";
+      notification.classList.remove("show");
       setTimeout(() => {
         if (notification.parentNode) {
           notification.parentNode.removeChild(notification);
         }
-      }, 300);
+      }, 250);
     }, 3000);
   }
 }

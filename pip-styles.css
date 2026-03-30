@@ -1,35 +1,43 @@
-/* Variabili CSS */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
-  /* Light theme */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+
   --bg-primary: #ffffff;
-  --bg-secondary: #f5f5f5;
-  --bg-tertiary: #e0e0e0;
-  --text-primary: #212121;
-  --text-secondary: #757575;
-  --accent: #2196f3;
-  --border: #e0e0e0;
-  --shadow: rgba(0, 0, 0, 0.1);
-  --success: #4caf50;
-  --warning: #ff9800;
-  --error: #f44336;
+  --bg-secondary: #f8f9fb;
+  --bg-tertiary: #eef0f4;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --shadow: rgba(0, 0, 0, 0.08);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --overlay: rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="dark"] {
-  /* Dark theme */
-  --bg-primary: #121212;
-  --bg-secondary: #1e1e1e;
-  --bg-tertiary: #2d2d2d;
-  --text-primary: #ffffff;
-  --text-secondary: #b0b0b0;
-  --accent: #64b5f6;
-  --border: #333333;
-  --shadow: rgba(0, 0, 0, 0.3);
-  --success: #66bb6a;
-  --warning: #ffb74d;
-  --error: #ef5350;
+  --bg-primary: #0f1117;
+  --bg-secondary: #181a20;
+  --bg-tertiary: #23262f;
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --accent: #60a5fa;
+  --accent-hover: #3b82f6;
+  --border: #2a2d37;
+  --border-light: #1f2129;
+  --shadow: rgba(0, 0, 0, 0.4);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --overlay: rgba(0, 0, 0, 0.7);
 }
 
-/* Stili base */
 * {
   margin: 0;
   padding: 0;
@@ -45,123 +53,110 @@ html, body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: var(--font-family);
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  line-height: 1.6;
+  line-height: 1.5;
   overflow: hidden;
   user-select: none;
-  transition:
-    background-color 0.3s ease,
-    color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Container PiP */
 .pip-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
   margin: 0;
   padding: 0;
-  background-color: #000000; /* Sfondo nero opaco per rendering più rapido */
-  border-radius: 4px; /* Ridotto per performance */
+  background-color: #000;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); /* Semplificato per performance */
-  /* backdrop-filter: blur(5px); Rimosso per migliorare performance */
-  will-change: transform; /* Ottimizzazione per GPU */
-  /* Ottimizzazioni per drag and drop fluido */
-  transform: translateZ(0); /* Forza accelerazione hardware */
-  backface-visibility: hidden; /* Previene flickering durante il movimento */
-  perspective: 1000px; /* Migliora le prestazioni di trasformazione */
+  box-shadow: 0 4px 24px var(--shadow), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Ottimizzazioni aggiuntive per drag fluido */
-  contain: layout style paint; /* Isola il rendering per migliorare performance */
-  isolation: isolate; /* Crea un nuovo stacking context per ottimizzare il rendering */
-  position: relative; /* Necessario per alcune ottimizzazioni del browser */
+  contain: layout style paint;
+  isolation: isolate;
+  position: relative;
   transition:
     transform 0.1s ease-out,
-    box-shadow 0.2s ease; /* Transizioni fluide */
+    box-shadow 0.2s ease;
 }
 
-/* Stato durante il dragging */
 .pip-container.dragging {
-  transform: translateZ(0) scale(1.02); /* Leggero ingrandimento per feedback visivo */
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); /* Ombra più profonda durante il drag */
-  transition: none; /* Disabilita transizioni durante il drag per massima reattività */
-  z-index: 9999; /* Assicura che sia sopra tutto durante il drag */
+  transform: translateZ(0) scale(1.02);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: none;
+  z-index: 9999;
 }
 
-/* Ottimizzazioni specifiche durante il drag */
 .pip-container.dragging .pip-video-container,
 .pip-container.dragging #pip-video,
 .pip-container.dragging #mjpeg-stream {
-  /* Riduci la qualità del rendering durante il drag per migliorare performance */
   image-rendering: -webkit-optimize-contrast;
   image-rendering: pixelated;
-  will-change: auto; /* Resetta will-change durante il drag */
+  will-change: auto;
 }
 
-/* Header */
 .pip-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: 6px 10px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   user-select: none;
 }
 
-.pip-header:active {
-}
-
 .pip-title {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .pip-controls {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .pip-btn {
   background: none;
   border: none;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: 6px;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
-  color: var(--text-primary);
+    background-color 0.15s ease,
+    color 0.15s ease;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
 }
 
 .pip-btn:hover {
   background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .pip-btn:active {
   background-color: var(--border);
 }
 
-/* Video container */
 .pip-video-container {
   position: relative;
   flex: 1;
   overflow: hidden;
   background-color: #000;
-  /* Ottimizzazioni per rendering video durante il drag */
   will-change: transform;
   contain: layout style paint;
   transform: translateZ(0);
-  /* Ottimizzazioni aggiuntive per fluidità */
-  isolation: isolate; /* Isola il rendering del video durante il drag */
-  position: relative;
+  isolation: isolate;
 }
 
 #pip-video,
@@ -169,17 +164,14 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* Ottimizzazioni per performance video */
   will-change: transform;
   contain: layout style paint;
   image-rendering: -webkit-optimize-contrast;
-  /* Ottimizzazioni aggiuntive per drag fluido */
   transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-transform: translateZ(0);
   -webkit-backface-visibility: hidden;
-  /* Ottimizzazioni per rendering durante il movimento */
-  pointer-events: none; /* Previene interferenze con il drag */
+  pointer-events: none;
   position: absolute;
   top: 0;
   left: 0;
@@ -197,28 +189,33 @@ body {
   align-items: center;
   background-color: #000;
   color: #fff;
-  /* Ottimizzazioni per rendering più rapido */
   contain: layout style paint;
 }
 
 .loading-image {
-  width: 60px; /* Ridotto per caricamento più rapido */
-  height: 60px;
+  width: 48px;
+  height: 48px;
   margin-bottom: 8px;
-  /* Ottimizzazione per caricamento più rapido */
+  opacity: 0.6;
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
+}
+
+.pip-loading p {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
 }
 
 .loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.15);
   border-radius: 50%;
   border-top-color: #fff;
-  animation: spin 1s ease-in-out infinite;
+  animation: spin 0.8s ease-in-out infinite;
   margin-bottom: 8px;
-  display: none; /* Hidden in favor of the SVG image */
+  display: none;
 }
 
 @keyframes spin {
@@ -229,19 +226,25 @@ body {
 
 .error-message {
   text-align: center;
-  color: #f44336;
+  color: #f87171;
+  padding: 0 1rem;
 }
 
 .error-message p {
-  margin: 4px 0;
-  font-size: 12px;
+  margin: 3px 0;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
-/* Timer */
+.error-message small {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 10px;
+}
+
 .pip-timer {
   position: relative;
-  height: 4px;
-  background-color: var(--bg-tertiary);
+  height: 3px;
+  background-color: rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
 
@@ -255,17 +258,17 @@ body {
 
 .timer-text {
   position: absolute;
-  top: 6px;
-  right: 8px;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-primary);
+  top: 4px;
+  right: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
   background-color: rgba(0, 0, 0, 0.5);
-  padding: 2px 6px;
-  border-radius: 10px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
 }
 
-/* Stili specifici per diverse dimensioni */
 @media (max-width: 240px) {
   .pip-title {
     display: none;
@@ -282,7 +285,6 @@ body {
   }
 }
 
-/* Animazioni */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -296,119 +298,114 @@ body {
   animation: fadeIn 0.3s ease;
 }
 
-/* Stili per il focus (accessibilità) */
 .pip-btn:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-
-/* Stili per il tema scuro */
-[data-theme="dark"] .loading-spinner {
-  border-color: rgba(255, 255, 255, 0.1);
-  border-top-color: #fff;
-}
-
-[data-theme="dark"] .error-message {
-  color: #ef5350;
 }
 
 [data-theme="dark"] .timer-text {
   background-color: rgba(255, 255, 255, 0.1);
 }
 
-/* Pulsante di chiusura fluttuante */
 .floating-close-btn {
   position: absolute;
   top: 8px;
   right: 8px;
   width: 24px;
   height: 24px;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: rgba(255, 255, 255, 0.8);
   font-size: 14px;
   transition:
-    background-color 0.2s ease,
-    transform 0.2s ease;
+    background-color 0.15s ease,
+    transform 0.15s ease;
   z-index: 1000;
+  cursor: pointer;
 }
 
 .floating-close-btn:hover {
-  background-color: rgba(244, 67, 54, 0.9);
-  transform: scale(1.1);
+  background-color: rgba(239, 68, 68, 0.85);
+  color: white;
+  transform: scale(1.08);
 }
 
 .floating-close-btn:active {
   transform: scale(0.95);
 }
 
-/* Pulsante audio (solo per HLS) */
 .audio-btn {
   position: absolute;
   top: 8px;
-  right: 40px;
+  right: 38px;
   width: 24px;
   height: 24px;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: rgba(255, 255, 255, 0.8);
   font-size: 14px;
   transition:
-    background-color 0.2s ease,
-    transform 0.2s ease;
+    background-color 0.15s ease,
+    transform 0.15s ease;
   z-index: 1000;
+  cursor: pointer;
 }
 
 .audio-btn:hover {
-  background-color: rgba(33, 150, 243, 0.9);
-  transform: scale(1.1);
+  background-color: rgba(59, 130, 246, 0.85);
+  color: white;
+  transform: scale(1.08);
 }
 
 .audio-btn:active {
   transform: scale(0.95);
 }
 
-/* Pulsante timer lock (clessidra) */
 .timer-lock-btn {
   position: absolute;
   top: 8px;
-  right: 72px;
+  right: 68px;
   width: 24px;
   height: 24px;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: rgba(255, 255, 255, 0.8);
   font-size: 14px;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  transition: background-color 0.15s ease, transform 0.15s ease;
   z-index: 1000;
+  cursor: pointer;
 }
 
 .timer-lock-btn:hover {
-  background-color: rgba(33, 150, 243, 0.9);
-  transform: scale(1.1);
+  background-color: rgba(59, 130, 246, 0.85);
+  color: white;
+  transform: scale(1.08);
 }
 
 .timer-lock-btn:active {
   transform: scale(0.95);
 }
 
-/* Stile per il pulsante bloccato */
 .timer-lock-btn.locked {
-  background-color: rgba(255, 87, 34, 0.9);
+  background-color: rgba(249, 115, 22, 0.85);
+  color: white;
 }
 
 .timer-lock-btn.locked:hover {
-  background-color: rgba(255, 87, 34, 1);
+  background-color: rgba(249, 115, 22, 1);
 }

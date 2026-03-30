@@ -509,54 +509,23 @@ async function testPiP() {
 
 // Funzioni di notifica
 function showNotification(message, type = "info") {
-  // Create notification element
   const notification = document.createElement("div");
   notification.className = `notification ${type}`;
   notification.textContent = message;
 
-  // Style the notification
-  Object.assign(notification.style, {
-    position: "fixed",
-    top: "20px",
-    right: "20px",
-    padding: "12px 20px",
-    borderRadius: "4px",
-    color: "white",
-    fontWeight: "500",
-    zIndex: "9999",
-    opacity: "0",
-    transform: "translateY(-20px)",
-    transition: "all 0.3s ease",
-  });
-
-  // Set background color based on type
-  const colors = {
-    success: "#4caf50",
-    error: "#f44336",
-    warning: "#ff9800",
-    info: "#2196f3",
-  };
-
-  notification.style.backgroundColor = colors[type] || colors.info;
-
-  // Add to DOM
   document.body.appendChild(notification);
 
-  // Animate in
-  setTimeout(() => {
-    notification.style.opacity = "1";
-    notification.style.transform = "translateY(0)";
-  }, 10);
+  requestAnimationFrame(() => {
+    notification.classList.add("show");
+  });
 
-  // Remove after 3 seconds
   setTimeout(() => {
-    notification.style.opacity = "0";
-    notification.style.transform = "translateY(-20px)";
+    notification.classList.remove("show");
     setTimeout(() => {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification);
       }
-    }, 300);
+    }, 250);
   }, 3000);
 }
 
