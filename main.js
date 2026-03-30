@@ -22,6 +22,7 @@ let ipcHandlers;
 let isWebSocketConnected = false;
 let isSystemLocked = false;
 let gotTheLock;
+const isAutoStart = process.argv.includes("--autostart");
 
 // Crea la finestra principale
 function createMainWindow() {
@@ -34,13 +35,19 @@ function createMainWindow() {
       nodeIntegration: true,
       contextIsolation: false,
     },
-
     show: false,
+    skipTaskbar: isAutoStart,
   });
 
   mainWindow.loadFile(appConfig.paths.mainWindowHtml);
 
   mainWindow.once("ready-to-show", () => {
+    if (isAutoStart) {
+      mainWindow.hide();
+      mainWindow.setSkipTaskbar(false);
+      return;
+    }
+
     const settings = settingsManager.getSettings();
     const hasHomeAssistantConfig = settings.homeAssistantUrl && settings.homeAssistantToken;
     const hasTray = trayManager && trayManager.isAvailable;
