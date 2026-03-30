@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PiP Camera</title>
     <link rel="stylesheet" href="pip-styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="node_modules/hls.js/dist/hls.min.js"></script>
   </head>
 
   <body>
@@ -150,7 +150,7 @@
 
       function loadCamera(config) {
         console.log("Caricamento camera con config:", config);
-        const { url, duration, useHLS, streamType, cameraName } = config;
+        const { url, duration, useHLS, streamType, cameraName, mjpegUrl } = config;
 
         if (!url) {
           console.error("URL video non fornito");
@@ -178,9 +178,9 @@
 
         requestAnimationFrame(() => {
           if (actualStreamType === "hls") {
-            streamBadge.textContent = "HLS";
+            streamBadge.textContent = "HLS...";
             streamBadge.dataset.type = "hls";
-            loadHlsStream(url);
+            loadHlsStream(url, mjpegUrl);
           } else if (actualStreamType === "mjpeg") {
             streamBadge.textContent = "MJPEG";
             streamBadge.dataset.type = "mjpeg";
@@ -193,7 +193,7 @@
         });
       }
 
-      function loadHlsStream(url) {
+      function loadHlsStream(url, previewUrl) {
         console.log(`Caricamento stream HLS da: ${url}`);
 
         try {
@@ -204,6 +204,14 @@
           isMuted = true;
           pipVideo.muted = isMuted;
           updateMuteButton();
+
+          if (previewUrl) {
+            mjpegStream.src = `${previewUrl}${previewUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`;
+            mjpegStream.style.display = "block";
+            pipVideo.style.display = "none";
+            streamBadge.textContent = "MJPEG...";
+            streamBadge.dataset.type = "mjpeg";
+          }
 
           if (Hls.isSupported()) {
             console.log("HLS.js supportato, inizializzazione...");
@@ -242,7 +250,12 @@
 
             hls.on(Hls.Events.MANIFEST_PARSED, function () {
               console.log("Manifest HLS caricato con successo");
+              mjpegStream.style.display = "none";
+              mjpegStream.src = "";
+              pipVideo.style.display = "block";
               pipLoading.style.display = "none";
+              streamBadge.textContent = "HLS";
+              streamBadge.dataset.type = "hls";
               pipVideo.play().catch((error) => {
                 console.error("Errore nella riproduzione automatico:", error);
               });
@@ -256,6 +269,9 @@
                     console.error("Errore di rete HLS, tentativo fallback MJPEG:", data);
                     hls.destroy();
                     window.hlsInstance = null;
+                    mjpegStream.style.display = "none";
+                    mjpegStream.src = "";
+                    pipVideo.style.display = "block";
                     streamBadge.textContent = "MJPEG";
                     streamBadge.dataset.type = "mjpeg";
                     loadMjpegStream(url);
@@ -268,6 +284,9 @@
                     console.error("Errore fatale HLS, fallback MJPEG:", data);
                     hls.destroy();
                     window.hlsInstance = null;
+                    mjpegStream.style.display = "none";
+                    mjpegStream.src = "";
+                    pipVideo.style.display = "block";
                     streamBadge.textContent = "MJPEG";
                     streamBadge.dataset.type = "mjpeg";
                     loadMjpegStream(url);

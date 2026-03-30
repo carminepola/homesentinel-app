@@ -263,11 +263,20 @@ class WebSocketManager {
 
       // Se HLS è abilitato, prova prima l'API WebSocket per ottenere l'URL HLS
       // Se fallisce, fallback a MJPEG
+      let mjpegUrl;
+      if (cameraState.attributes?.entity_picture) {
+        mjpegUrl = `${homeAssistantUrl}${cameraState.attributes.entity_picture}`;
+      } else if (cameraState.attributes?.access_token) {
+        mjpegUrl = `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${cameraState.attributes.access_token}`;
+      } else {
+        mjpegUrl = `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${homeAssistantToken}`;
+      }
+
       if (useHLS) {
         try {
           const hlsUrl = await this.getHlsStreamUrl(cameraId, homeAssistantUrl);
           if (hlsUrl) {
-            return { url: hlsUrl, friendlyName, streamType: "hls" };
+            return { url: hlsUrl, friendlyName, streamType: "hls", mjpegUrl };
           }
           
           console.log(`HLS non disponibile per ${cameraId}, fallback a MJPEG`);
@@ -277,15 +286,7 @@ class WebSocketManager {
         }
       }
 
-      let cameraUrl;
-      if (cameraState.attributes?.entity_picture) {
-        cameraUrl = `${homeAssistantUrl}${cameraState.attributes.entity_picture}`;
-      } else if (cameraState.attributes?.access_token) {
-        cameraUrl = `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${cameraState.attributes.access_token}`;
-      } else {
-        cameraUrl = `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${homeAssistantToken}`;
-      }
-      return { url: cameraUrl, friendlyName, streamType: "mjpeg" };
+      return { url: mjpegUrl, friendlyName, streamType: "mjpeg" };
     } catch (error) {
       console.error(`Errore nell'ottenere l'URL della camera ${cameraId}:`, error);
       return null;
