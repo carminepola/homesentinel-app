@@ -20,7 +20,7 @@ class PiPWindowManager {
     this.websocketManager = websocketManager;
   }
 
-  createPiPWindow(cameraUrl, cameraSettings, duration) {
+  createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null) {
     if (!cameraUrl) {
       console.error("cameraUrl non fornito");
       return null;
@@ -89,6 +89,7 @@ class PiPWindowManager {
           duration: duration || 10,
           useHLS: useHLS,
           streamType: streamType,
+          cameraName: cameraName,
         });
 
         // Invia il messaggio per l'animazione di apertura
@@ -414,12 +415,15 @@ class PiPWindowManager {
       }
 
       const useHLS = settings.streamingSettings?.useHLS || false;
-      finalCameraUrl = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
+      const cameraResult = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
 
-      if (!finalCameraUrl) {
+      if (!cameraResult) {
         console.error("Impossibile ottenere l'URL della camera");
         return;
       }
+
+      finalCameraUrl = cameraResult.url;
+      const cameraName = cameraResult.friendlyName;
     }
 
     if (!finalCameraUrl) {
@@ -445,7 +449,7 @@ class PiPWindowManager {
       cameraSettings.position = settings.pipSettings.position || "top-right";
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, mapping.duration || settings.pipSettings.defaultDuration);
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, mapping.duration || settings.pipSettings.defaultDuration, cameraName);
     if (result && mapping.cameraId) {
       this.windowCameraIdMap.set(result.id, mapping.cameraId);
     }
@@ -495,6 +499,7 @@ class PiPWindowManager {
 
   async testCamera(cameraUrl, cameraSettings, cameraId = null, duration = 5) {
     let finalCameraUrl = cameraUrl;
+    let cameraName = null;
 
     const globalSettings = this.settingsManager.getSettings();
     const globalPosition = globalSettings.pipSettings?.position || "top-right";
@@ -514,15 +519,18 @@ class PiPWindowManager {
       }
 
       const useHLS = globalSettings.streamingSettings?.useHLS || false;
-      finalCameraUrl = await this.websocketManager.getCameraUrlWithToken(cameraId, globalSettings.homeAssistantUrl, globalSettings.homeAssistantToken, useHLS);
+      const cameraResult = await this.websocketManager.getCameraUrlWithToken(cameraId, globalSettings.homeAssistantUrl, globalSettings.homeAssistantToken, useHLS);
 
-      if (!finalCameraUrl) {
+      if (!cameraResult) {
         console.error("Impossibile ottenere l'URL della camera per il test");
         return;
       }
+
+      finalCameraUrl = cameraResult.url;
+      cameraName = cameraResult.friendlyName;
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration);
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName);
 
     if (result && cameraId) {
       this.windowCameraIdMap.set(result.id, cameraId);

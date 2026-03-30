@@ -33,7 +33,7 @@ const appConfig = {
     alwaysOnTop: true,
     resizable: true,
     skipTaskbar: true,
-    backgroundColor: "#000000",
+    transparent: true,
     focusable: false,
     acceptFirstMouse: true,
   },

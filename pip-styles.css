@@ -2,40 +2,16 @@
 
 :root {
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8f9fb;
-  --bg-tertiary: #eef0f4;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
   --accent: #3b82f6;
   --accent-hover: #2563eb;
-  --border: #e5e7eb;
-  --border-light: #f3f4f6;
-  --shadow: rgba(0, 0, 0, 0.08);
   --success: #10b981;
   --warning: #f59e0b;
+  --warning-text: #fbbf24;
   --error: #ef4444;
-  --overlay: rgba(0, 0, 0, 0.6);
-}
-
-[data-theme="dark"] {
-  --bg-primary: #0f1117;
-  --bg-secondary: #181a20;
-  --bg-tertiary: #23262f;
-  --text-primary: #f3f4f6;
-  --text-secondary: #9ca3af;
-  --text-tertiary: #6b7280;
-  --accent: #60a5fa;
-  --accent-hover: #3b82f6;
-  --border: #2a2d37;
-  --border-light: #1f2129;
-  --shadow: rgba(0, 0, 0, 0.4);
-  --success: #34d399;
-  --warning: #fbbf24;
-  --error: #f87171;
-  --overlay: rgba(0, 0, 0, 0.7);
+  --error-light: rgba(239, 68, 68, 0.15);
+  --info: #60a5fa;
+  --locked: #f97316;
+  --overlay-controls: rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -50,12 +26,12 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background: transparent;
 }
 
 body {
   font-family: var(--font-family);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  color: #f3f4f6;
   line-height: 1.5;
   overflow: hidden;
   user-select: none;
@@ -70,15 +46,16 @@ body {
   margin: 0;
   padding: 0;
   background-color: #000;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 4px 24px var(--shadow), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.3);
   will-change: transform;
   transform: translateZ(0);
   backface-visibility: hidden;
   perspective: 1000px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   contain: layout style paint;
   isolation: isolate;
   position: relative;
@@ -88,8 +65,11 @@ body {
 }
 
 .pip-container.dragging {
-  transform: translateZ(0) scale(1.02);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transform: translateZ(0) scale(1.03);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 16px 48px rgba(0, 0, 0, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.4);
   transition: none;
   z-index: 9999;
 }
@@ -106,17 +86,18 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 10px;
-  background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  padding: 5px 10px;
+  background: rgba(15, 17, 23, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   user-select: none;
 }
 
 .pip-title {
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.01em;
 }
 
 .pip-controls {
@@ -127,12 +108,10 @@ body {
 .pip-btn {
   background: none;
   border: none;
-  padding: 4px;
-  border-radius: 6px;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
-  color: var(--text-secondary);
+  padding: 3px;
+  border-radius: 5px;
+  transition: all 0.15s ease;
+  color: rgba(255, 255, 255, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,12 +119,12 @@ body {
 }
 
 .pip-btn:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .pip-btn:active {
-  background-color: var(--border);
+  background-color: rgba(255, 255, 255, 0.15);
 }
 
 .pip-video-container {
@@ -169,8 +148,6 @@ body {
   image-rendering: -webkit-optimize-contrast;
   transform: translateZ(0);
   backface-visibility: hidden;
-  -webkit-transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
   pointer-events: none;
   position: absolute;
   top: 0;
@@ -188,150 +165,138 @@ body {
   justify-content: center;
   align-items: center;
   background-color: #000;
-  color: #fff;
   contain: layout style paint;
 }
 
-.loading-image {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 8px;
-  opacity: 0.6;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-}
-
-.pip-loading p {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 500;
-}
-
-.loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.15);
+.pip-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2.5px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  border-top-color: #fff;
-  animation: spin 0.8s ease-in-out infinite;
-  margin-bottom: 8px;
-  display: none;
+  animation: pip-spin 0.8s linear infinite;
+  margin-bottom: 10px;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+@keyframes pip-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pip-loading-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.loading-image {
+  display: none;
 }
 
 .error-message {
   text-align: center;
-  color: #f87171;
-  padding: 0 1rem;
+  padding: 1rem;
+  background: var(--error-light);
+  border-radius: 8px;
+  margin: 0 1rem;
+  max-width: 240px;
+}
+
+.error-message .error-icon {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 6px;
+  opacity: 0.7;
 }
 
 .error-message p {
-  margin: 3px 0;
+  margin: 2px 0;
   font-size: 11px;
   line-height: 1.4;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.error-message p:first-of-type {
+  color: var(--error);
+  font-weight: 600;
 }
 
 .error-message small {
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 10px;
-}
-
-.pip-timer {
-  position: relative;
-  height: 3px;
-  background-color: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-
-.timer-bar {
-  height: 100%;
-  background-color: var(--success);
-  transition:
-    width 1s linear,
-    background-color 0.3s ease;
-}
-
-.timer-text {
-  position: absolute;
-  top: 4px;
-  right: 6px;
+  color: rgba(255, 255, 255, 0.25);
   font-size: 9px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  background-color: rgba(0, 0, 0, 0.5);
-  padding: 1px 5px;
-  border-radius: 6px;
-  letter-spacing: 0.02em;
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
-@media (max-width: 240px) {
-  .pip-title {
-    display: none;
-  }
-
-  .timer-text {
-    display: none;
-  }
-}
-
-@media (max-height: 180px) {
-  .pip-timer {
-    height: 2px;
-  }
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.pip-container {
-  animation: fadeIn 0.3s ease;
-}
-
-.pip-btn:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-[data-theme="dark"] .timer-text {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.floating-close-btn {
+.pip-overlay {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  background-color: rgba(0, 0, 0, 0.55);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.pip-video-container:hover .pip-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pip-overlay-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 6px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 100%);
+}
+
+.pip-overlay-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 6px 8px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 100%);
+}
+
+.pip-camera-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.floating-close-btn,
+.audio-btn,
+.timer-lock-btn {
+  width: 26px;
+  height: 26px;
+  background: var(--overlay-controls);
   backdrop-filter: blur(8px);
   border: none;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
-  transition:
-    background-color 0.15s ease,
-    transform 0.15s ease;
-  z-index: 1000;
+  color: rgba(255, 255, 255, 0.75);
+  transition: all 0.15s ease;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .floating-close-btn:hover {
-  background-color: rgba(239, 68, 68, 0.85);
-  color: white;
+  background: rgba(239, 68, 68, 0.8);
+  color: #fff;
   transform: scale(1.08);
 }
 
@@ -339,31 +304,9 @@ body {
   transform: scale(0.95);
 }
 
-.audio-btn {
-  position: absolute;
-  top: 8px;
-  right: 38px;
-  width: 24px;
-  height: 24px;
-  background-color: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-  border: none;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
-  transition:
-    background-color 0.15s ease,
-    transform 0.15s ease;
-  z-index: 1000;
-  cursor: pointer;
-}
-
 .audio-btn:hover {
-  background-color: rgba(59, 130, 246, 0.85);
-  color: white;
+  background: rgba(59, 130, 246, 0.8);
+  color: #fff;
   transform: scale(1.08);
 }
 
@@ -371,29 +314,9 @@ body {
   transform: scale(0.95);
 }
 
-.timer-lock-btn {
-  position: absolute;
-  top: 8px;
-  right: 68px;
-  width: 24px;
-  height: 24px;
-  background-color: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-  border: none;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
-  transition: background-color 0.15s ease, transform 0.15s ease;
-  z-index: 1000;
-  cursor: pointer;
-}
-
 .timer-lock-btn:hover {
-  background-color: rgba(59, 130, 246, 0.85);
-  color: white;
+  background: rgba(59, 130, 246, 0.8);
+  color: #fff;
   transform: scale(1.08);
 }
 
@@ -402,10 +325,137 @@ body {
 }
 
 .timer-lock-btn.locked {
-  background-color: rgba(249, 115, 22, 0.85);
-  color: white;
+  background: rgba(249, 115, 22, 0.8);
+  color: #fff;
 }
 
 .timer-lock-btn.locked:hover {
-  background-color: rgba(249, 115, 22, 1);
+  background: rgba(249, 115, 22, 1);
+}
+
+.pip-timer {
+  position: relative;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: visible;
+}
+
+.pip-timer::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  height: 5px;
+  border-radius: 0 0 3px 3px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.timer-bar {
+  height: 100%;
+  background: var(--success);
+  border-radius: 0 0 0 3px;
+  transition:
+    width 1s linear,
+    background-color 0.3s ease;
+  position: relative;
+}
+
+.timer-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2));
+  border-radius: 0 0 3px 0;
+}
+
+.timer-text {
+  position: absolute;
+  top: -28px;
+  right: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.timer-text.timer-warning {
+  color: var(--warning-text);
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.timer-text.timer-danger {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.timer-text.timer-info {
+  color: var(--info);
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.timer-text.timer-locked {
+  color: var(--locked);
+  background: rgba(249, 115, 22, 0.15);
+}
+
+@keyframes pipFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pip-container {
+  animation: pipFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pip-btn:focus,
+.floating-close-btn:focus,
+.audio-btn:focus,
+.timer-lock-btn:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 200px) {
+  .pip-overlay-top {
+    padding: 4px;
+    gap: 3px;
+  }
+
+  .floating-close-btn,
+  .audio-btn,
+  .timer-lock-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+  }
+
+  .timer-text {
+    display: none;
+  }
+
+  .pip-camera-label {
+    font-size: 9px;
+  }
+}
+
+@media (max-height: 150px) {
+  .pip-timer {
+    height: 2px;
+  }
 }

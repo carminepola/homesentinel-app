@@ -5,19 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PiP Camera</title>
     <link rel="stylesheet" href="pip-styles.css" />
-    <!-- HLS.js per lo streaming HLS -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <!-- Preload risorse critiche per caricamento più rapido -->
-    <link rel="preload" href="assets/loading.svg" as="image" />
   </head>
 
   <body>
     <div class="pip-container" id="pip-container">
       <div class="pip-header" id="pip-header" style="display: none">
-        <div class="pip-title">Camera</div>
+        <div class="pip-title" id="pip-camera-name">Camera</div>
         <div class="pip-controls">
           <button id="close-btn" class="pip-btn" title="Chiudi">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
@@ -28,69 +25,52 @@
       <div class="pip-video-container">
         <video id="pip-video" autoplay playsinline style="display: none"></video>
         <img id="mjpeg-stream" style="display: none; width: 100%; height: 100%; object-fit: cover" alt="Stream Camera" />
+
         <div class="pip-loading" id="pip-loading">
-          <img src="assets/loading.svg" alt="Caricamento..." class="loading-image" />
-          <p>Caricamento...</p>
+          <div class="pip-loading-spinner"></div>
+          <div class="pip-loading-text">Caricamento...</div>
         </div>
 
-        <!-- Pulsante di chiusura fluttuante -->
-        <button id="floating-close-btn" class="floating-close-btn" title="Chiudi">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+        <div class="pip-overlay">
+          <div class="pip-overlay-top">
+            <button id="audio-btn" class="audio-btn" title="Audio" style="display: none">
+              <svg id="mute-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+              </svg>
+              <svg id="unmute-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+            </button>
 
-        <!-- Pulsante audio (solo per HLS) -->
-        <button id="audio-btn" class="audio-btn" title="Audio" style="display: none">
-          <svg
-            id="mute-icon"
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <line x1="23" y1="9" x2="17" y2="15"></line>
-            <line x1="17" y1="9" x2="23" y2="15"></line>
-          </svg>
-          <svg
-            id="unmute-icon"
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            style="display: none"
-          >
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-          </svg>
-        </button>
+            <button id="timer-lock-btn" class="timer-lock-btn" title="Blocca/Sblocca Timer">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v4"></path>
+                <path d="m16.2 7.8 2.9-2.9"></path>
+                <path d="M18 12h4"></path>
+                <path d="m16.2 16.2 2.9 2.9"></path>
+                <path d="M12 18v4"></path>
+                <path d="m4.9 19.1 2.9-2.9"></path>
+                <path d="M2 12h4"></path>
+                <path d="m4.9 4.9 2.9 2.9"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
 
-        <!-- Pulsante timer lock (clessidra) -->
-        <button id="timer-lock-btn" class="timer-lock-btn" title="Blocca/Sblocca Timer">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v4"></path>
-            <path d="m16.2 7.8 2.9-2.9"></path>
-            <path d="M18 12h4"></path>
-            <path d="m16.2 16.2 2.9 2.9"></path>
-            <path d="M12 18v4"></path>
-            <path d="m4.9 19.1 2.9-2.9"></path>
-            <path d="M2 12h4"></path>
-            <path d="m4.9 4.9 2.9 2.9"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-        </button>
+            <button id="floating-close-btn" class="floating-close-btn" title="Chiudi">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <div class="pip-overlay-bottom">
+            <div class="pip-camera-label" id="pip-overlay-camera-name"></div>
+          </div>
+        </div>
       </div>
 
       <div class="pip-timer">
@@ -102,12 +82,13 @@
     <script>
       const { ipcRenderer } = require("electron");
 
-      // Elementi DOM
       const pipContainer = document.getElementById("pip-container");
       const pipHeader = document.getElementById("pip-header");
       const pipVideo = document.getElementById("pip-video");
       const mjpegStream = document.getElementById("mjpeg-stream");
       const pipLoading = document.getElementById("pip-loading");
+      const pipCameraName = document.getElementById("pip-camera-name");
+      const pipOverlayCameraName = document.getElementById("pip-overlay-camera-name");
 
       const muteIcon = document.getElementById("mute-icon");
       const unmuteIcon = document.getElementById("unmute-icon");
@@ -118,25 +99,20 @@
       const timerText = document.getElementById("timer-text");
       const timerLockBtn = document.getElementById("timer-lock-btn");
 
-      // Stato
       let isMuted = true;
       let timerInterval;
       let remainingTime = 10;
       let totalTime = 10;
       let fallbackTimeout;
       let isTimerPaused = false;
-      let isTimerLocked = false; // Stato del blocco del timer tramite pulsante
-      // Inizializzazione ottimizzata
-      document.addEventListener("DOMContentLoaded", () => {
-        // Setup immediato degli event listener critici
-        setupEventListeners();
+      let isTimerLocked = false;
 
-        // Pre-imposta lo stato iniziale per riduire flicker
+      document.addEventListener("DOMContentLoaded", () => {
+        setupEventListeners();
         pipContainer.style.opacity = "1";
         pipContainer.style.visibility = "visible";
       });
 
-      // IPC event listeners
       ipcRenderer.on("load-camera", (event, config) => {
         loadCamera(config);
       });
@@ -153,51 +129,56 @@
         animateWindowOpen();
       });
 
+      function getErrorHtml(message, detail, url) {
+        const urlSnippet = url ? `<small>${url.substring(0, 50)}${url.length > 50 ? "..." : ""}</small>` : "";
+        return `
+          <div class="error-message">
+            <svg class="error-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <p>${message}</p>
+            ${detail ? `<p>${detail}</p>` : ""}
+            ${urlSnippet}
+          </div>
+        `;
+      }
+
       function loadCamera(config) {
         console.log("Caricamento camera con config:", config);
-        const { url, duration, useHLS, streamType } = config;
+        const { url, duration, useHLS, streamType, cameraName } = config;
 
-        // Verifica rapida dei dati
         if (!url) {
           console.error("URL video non fornito");
-          pipLoading.innerHTML = `
-                    <div class="error-message">
-                        <p>URL video non fornito</p>
-                    </div>
-                `;
+          pipLoading.innerHTML = getErrorHtml("URL video non fornito");
           return;
         }
 
-        // Memorizza l'URL della camera per il tracciamento
         window.cameraUrl = url;
 
-        // Imposta il tempo totale
+        if (cameraName) {
+          pipCameraName.textContent = cameraName;
+          pipOverlayCameraName.textContent = cameraName;
+        }
+
         totalTime = parseInt(duration) || 10;
         remainingTime = totalTime;
         updateTimerDisplay();
-        console.log(`Timer impostato a ${totalTime} secondi`);
 
-        // Nascondi entrambi gli elementi multimediali all'inizio
         pipVideo.style.display = "none";
         mjpegStream.style.display = "none";
-
-        // Nascondi il pulsante audio all'inizio
         audioBtn.style.display = "none";
 
-        // Usa il tipo di stream fornito dal backend
         const actualStreamType = streamType || "mjpeg";
         console.log(`Tipo di stream: ${actualStreamType}`);
 
-        // Carica il contenuto in modo asincrono per non bloccare l'UI
         requestAnimationFrame(() => {
           if (actualStreamType === "hls") {
-            // Carica stream HLS
             loadHlsStream(url);
           } else if (actualStreamType === "mjpeg") {
-            // Carica stream MJPEG
             loadMjpegStream(url);
           } else {
-            // Carica video standard
             loadStandardVideo(url);
           }
         });
@@ -207,19 +188,14 @@
         console.log(`Caricamento stream HLS da: ${url}`);
 
         try {
-          // Nascondi lo stream MJPEG e mostra il video
           mjpegStream.style.display = "none";
           pipVideo.style.display = "block";
-
-          // Mostra il pulsante audio per HLS
           audioBtn.style.display = "flex";
 
-          // Imposta il video come muto per consentire l'autoplay
           isMuted = true;
           pipVideo.muted = isMuted;
           updateMuteButton();
 
-          // Verifica se HLS.js è supportato
           if (Hls.isSupported()) {
             console.log("HLS.js supportato, inizializzazione...");
             const hls = new Hls({
@@ -261,10 +237,8 @@
               }
             });
 
-            // Salva l'istanza HLS per la pulizia
             window.hlsInstance = hls;
           } else if (pipVideo.canPlayType("application/vnd.apple.mpegurl")) {
-            // Supporto nativo HLS (Safari)
             console.log("Supporto HLS nativo rilevato");
             pipVideo.src = url;
 
@@ -277,36 +251,24 @@
               startTimer();
             });
 
-            pipVideo.addEventListener("error", function (e) {
-              console.error("Errore nel caricamento del video HLS:", e);
-              pipLoading.innerHTML = `
-                <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
-                <div class="error-message">
-                  <p>Errore nel caricamento dello stream HLS</p>
-                  <p>Verifica l'URL della telecamera e la connessione</p>
-                  <small>URL: ${url.substring(0, 50)}${url.length > 50 ? "..." : ""}</small>
-                </div>
-              `;
+            pipVideo.addEventListener("error", function () {
+              console.error("Errore nel caricamento del video HLS");
+              pipLoading.innerHTML = getErrorHtml(
+                "Errore nello streaming HLS",
+                "Verifica URL e connessione",
+                url
+              );
             });
           } else {
             console.error("HLS non supportato in questo browser");
-            pipLoading.innerHTML = `
-              <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
-              <div class="error-message">
-                <p>HLS non supportato in questo browser</p>
-                <p>Prova a disabilitare l'opzione HLS nelle impostazioni</p>
-              </div>
-            `;
+            pipLoading.innerHTML = getErrorHtml(
+              "HLS non supportato",
+              "Disabilita HLS nelle impostazioni"
+            );
           }
         } catch (error) {
           console.error("Errore nell'inizializzazione dello stream HLS:", error);
-          pipLoading.innerHTML = `
-            <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
-            <div class="error-message">
-              <p>Errore nell'inizializzazione dello stream HLS</p>
-              <p>${error.message}</p>
-            </div>
-          `;
+          pipLoading.innerHTML = getErrorHtml("Errore inizializzazione HLS", error.message);
         }
       }
 
@@ -314,18 +276,13 @@
         console.log(`Caricamento stream MJPEG da: ${url}`);
 
         try {
-          // Nascondi il video e mostra lo stream MJPEG immediatamente
           pipVideo.style.display = "none";
           mjpegStream.style.display = "block";
-
-          // Nascondi il pulsante audio (MJPEG non supporta audio)
           audioBtn.style.display = "none";
 
-          // Imposta l'URL dello stream MJPEG con cache busting per evitare cache vecchie
           const timestamp = Date.now();
           mjpegStream.src = `${url}${url.includes("?") ? "&" : "?"}_t=${timestamp}`;
 
-          // Timeout più breve per il caricamento
           const loadTimeout = setTimeout(() => {
             if (pipLoading.style.display !== "none") {
               console.warn("Timeout caricamento MJPEG, mostro comunque");
@@ -334,7 +291,6 @@
             }
           }, 3000);
 
-          // Gestione eventi per l'immagine MJPEG
           mjpegStream.onload = () => {
             clearTimeout(loadTimeout);
             console.log("Stream MJPEG caricato con successo");
@@ -342,62 +298,43 @@
             startTimer();
           };
 
-          mjpegStream.onerror = (e) => {
+          mjpegStream.onerror = () => {
             clearTimeout(loadTimeout);
-            console.error("Errore nel caricamento dello stream MJPEG:", e);
-            pipLoading.innerHTML = `
-              <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
-              <div class="error-message">
-                <p>Errore nel caricamento dello stream MJPEG</p>
-                <p>Verifica l'URL della telecamera e la connessione</p>
-                <small>URL: ${url.substring(0, 50)}${url.length > 50 ? "..." : ""}</small>
-              </div>
-            `;
+            console.error("Errore nel caricamento dello stream MJPEG");
+            pipLoading.innerHTML = getErrorHtml(
+              "Errore caricamento MJPEG",
+              "Verifica URL e connessione",
+              url
+            );
           };
         } catch (error) {
           console.error("Errore nell'inizializzazione dello stream MJPEG:", error);
-          pipLoading.innerHTML = `
-            <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
-            <div class="error-message">
-              <p>Errore nell'inizializzazione dello stream MJPEG</p>
-              <p>${error.message}</p>
-            </div>
-          `;
+          pipLoading.innerHTML = getErrorHtml("Errore inizializzazione MJPEG", error.message);
         }
       }
 
       function loadStandardVideo(url) {
         console.log(`Caricamento video standard da: ${url}`);
 
-        // Audio non supportato, sempre muto
         isMuted = true;
         pipVideo.muted = isMuted;
         updateMuteButton();
-        console.log(`Audio non supportato, video impostato come muto`);
-
-        // Nascondi il pulsante audio (video standard non supporta audio)
         audioBtn.style.display = "none";
 
         try {
-          // Mostra immediatamente il container del video per ridurre il percepito di attesa
           pipVideo.style.display = "block";
 
-          // Resetta il video precedente in modo più efficiente
           if (pipVideo.src !== url) {
             pipVideo.pause();
             pipVideo.currentTime = 0;
           }
 
-          // Imposta attributi per migliorare la compatibilità con streaming
           pipVideo.crossOrigin = "anonymous";
           pipVideo.playsInline = true;
           pipVideo.muted = isMuted;
-          pipVideo.preload = "auto"; // Preload immediato per caricamento più rapido
-
-          // Carica il nuovo URL
+          pipVideo.preload = "auto";
           pipVideo.src = url;
 
-          // Timeout più breve per il caricamento video
           const loadTimeout = setTimeout(() => {
             if (pipLoading.style.display !== "none") {
               console.warn("Timeout caricamento video, mostro comunque");
@@ -406,69 +343,52 @@
             }
           }, 4000);
 
-          // Gestione eventi video migliorata
           const handleLoadedData = () => {
             clearTimeout(loadTimeout);
             console.log("Video caricato con successo");
             pipLoading.style.display = "none";
             pipVideo.style.display = "block";
             startTimer();
-            // Rimuovi l'event listener per evitare duplicazioni
             pipVideo.removeEventListener("loadeddata", handleLoadedData);
             pipVideo.removeEventListener("error", handleError);
           };
 
-          const handleError = (e) => {
+          const handleError = () => {
             clearTimeout(loadTimeout);
-            console.error("Errore nel caricamento del video:", e);
+            console.error("Errore nel caricamento del video");
             let errorMessage = "Errore nel caricamento del video";
 
-            // Fornisci messaggi di errore più specifici
             if (pipVideo.error) {
               switch (pipVideo.error.code) {
                 case pipVideo.error.MEDIA_ERR_ABORTED:
                   errorMessage = "Caricamento video interrotto";
                   break;
                 case pipVideo.error.MEDIA_ERR_NETWORK:
-                  errorMessage = "Errore di rete nel caricamento del video";
+                  errorMessage = "Errore di rete nel caricamento";
                   break;
                 case pipVideo.error.MEDIA_ERR_DECODE:
-                  errorMessage = "Errore di decodifica video (possibile problema GPU)";
+                  errorMessage = "Errore di decodifica video";
                   break;
                 case pipVideo.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                  errorMessage = "Formato video non supportato o URL non valido";
+                  errorMessage = "Formato non supportato o URL non valido";
                   break;
               }
             }
 
-            pipLoading.innerHTML = `
-                        <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
-                        <div class="error-message">
-                            <p>${errorMessage}</p>
-                            <p>Verifica l'URL della telecamera e la connessione</p>
-                            <small>URL: ${url.substring(0, 50)}${url.length > 50 ? "..." : ""}</small>
-                        </div>
-                    `;
+            pipLoading.innerHTML = getErrorHtml(errorMessage, "Verifica URL e connessione", url);
           };
 
           pipVideo.addEventListener("loadeddata", handleLoadedData, { once: true });
           pipVideo.addEventListener("error", handleError, { once: true });
 
-          // Forza il caricamento in modo più efficiente
           pipVideo.load().catch((error) => {
             clearTimeout(loadTimeout);
             console.error("Errore nel caricamento forzato del video:", error);
-            handleError({ error: error });
+            handleError();
           });
         } catch (error) {
           console.error("Errore nell'inizializzazione del video:", error);
-          pipLoading.innerHTML = `
-                    <img src="assets/loading.svg" alt="Errore" class="loading-image" style="opacity: 0.5;">
-                    <div class="error-message">
-                        <p>Errore nell\'inizializzazione del video</p>
-                        <p>${error.message}</p>
-                    </div>
-                `;
+          pipLoading.innerHTML = getErrorHtml("Errore inizializzazione video", error.message);
         }
       }
 
@@ -478,7 +398,6 @@
         audioBtn.addEventListener("click", toggleMute);
         timerLockBtn.addEventListener("click", toggleTimerLock);
 
-        // Previeni il menu contestuale
         pipContainer.addEventListener("contextmenu", (e) => {
           e.preventDefault();
         });
@@ -494,15 +413,11 @@
         isTimerLocked = !isTimerLocked;
 
         if (isTimerLocked) {
-          // Blocca il timer
           pauseTimer();
-          // Aggiorna lo stile del pulsante per mostrare che è bloccato
           timerLockBtn.classList.add("locked");
           timerLockBtn.title = "Sblocca Timer";
         } else {
-          // Sblocca il timer
           resumeTimer();
-          // Aggiorna lo stile del pulsante per mostrare che è sbloccato
           timerLockBtn.classList.remove("locked");
           timerLockBtn.title = "Blocca Timer";
         }
@@ -523,13 +438,11 @@
         clearTimeout(fallbackTimeout);
         isTimerPaused = false;
 
-        // Pulisci l'istanza HLS se presente
         if (window.hlsInstance) {
           window.hlsInstance.destroy();
           window.hlsInstance = null;
         }
 
-        // Ferma il video
         if (pipVideo) {
           pipVideo.pause();
           pipVideo.src = "";
@@ -539,11 +452,9 @@
       }
 
       function animateWindowClose() {
-        const duration = 200; // 200ms per l'animazione
-
-        // Aggiungi la classe di animazione
-        pipContainer.style.transition = `transform ${duration}ms ease-in, opacity ${duration}ms ease-in`;
-        pipContainer.style.transform = "scale(0.8)";
+        const duration = 200;
+        pipContainer.style.transition = `transform ${duration}ms cubic-bezier(0.4, 0, 1, 1), opacity ${duration}ms cubic-bezier(0.4, 0, 1, 1)`;
+        pipContainer.style.transform = "scale(0.85)";
         pipContainer.style.opacity = "0";
 
         setTimeout(() => {
@@ -552,23 +463,17 @@
       }
 
       function animateWindowOpen() {
-        const duration = 300; // 300ms per l'animazione
-
-        // Imposta lo stato iniziale
-        pipContainer.style.transform = "scale(0.8)";
+        const duration = 300;
+        pipContainer.style.transform = "scale(0.85)";
         pipContainer.style.opacity = "0";
-
-        // Forza il reflow per applicare lo stato iniziale
         pipContainer.offsetHeight;
 
-        // Anima allo stato finale
-        pipContainer.style.transition = `transform ${duration}ms ease-out, opacity ${duration}ms ease-out`;
+        pipContainer.style.transition = `transform ${duration}ms cubic-bezier(0.16, 1, 0.3, 1), opacity ${duration}ms cubic-bezier(0.16, 1, 0.3, 1)`;
         pipContainer.style.transform = "scale(1)";
         pipContainer.style.opacity = "1";
       }
 
       function startTimer() {
-        // Non avviare il timer se è in pausa
         if (isTimerPaused) {
           console.log("Timer in pausa, non avvio");
           return;
@@ -577,7 +482,6 @@
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
 
-        // Assicurati che il timer sia un numero valido
         if (isNaN(totalTime) || totalTime <= 0) {
           totalTime = 10;
           remainingTime = 10;
@@ -610,90 +514,92 @@
         timerBar.style.width = `${percentage}%`;
         timerText.textContent = `${remainingTime}s`;
 
-        // Cambia colore quando mancano pochi secondi
+        timerText.className = "timer-text";
+
         if (remainingTime <= 3) {
-          timerBar.style.backgroundColor = "#f44336";
+          timerBar.style.backgroundColor = "var(--error)";
+          timerText.classList.add("timer-danger");
         } else if (remainingTime <= 5) {
-          timerBar.style.backgroundColor = "#ff9800";
+          timerBar.style.backgroundColor = "var(--warning)";
+          timerText.classList.add("timer-warning");
         } else {
-          timerBar.style.backgroundColor = "#4caf50";
+          timerBar.style.backgroundColor = "var(--success)";
         }
       }
 
       function pauseTimer() {
         if (isTimerPaused) {
-          console.log("⚠️ Timer già in pausa, ignoro richiesta");
+          console.log("Timer gia in pausa, ignoro richiesta");
           return;
         }
         isTimerPaused = true;
         clearInterval(timerInterval);
         clearTimeout(fallbackTimeout);
-        console.log("⏸️ Timer in pausa - Tempo rimanente:", remainingTime);
-        // Mostra indicazione visiva che il timer è in pausa/bloccato
+        console.log("Timer in pausa - Tempo rimanente:", remainingTime);
+
+        timerText.className = "timer-text";
+
         if (isTimerLocked) {
-          timerText.textContent = `${remainingTime}s (BLOCCATO)`;
-          timerBar.style.backgroundColor = "#ff5722";
+          timerText.textContent = `${remainingTime}s Bloccato`;
+          timerBar.style.backgroundColor = "var(--locked)";
+          timerText.classList.add("timer-locked");
         } else {
-          timerText.textContent = `${remainingTime}s (PAUSA)`;
-          timerBar.style.backgroundColor = "#2196f3";
+          timerText.textContent = `${remainingTime}s Pausa`;
+          timerBar.style.backgroundColor = "var(--info)";
+          timerText.classList.add("timer-info");
         }
       }
 
       function resumeTimer() {
         if (!isTimerPaused) {
-          console.log("⚠️ Timer non in pausa, ignoro richiesta di ripresa");
+          console.log("Timer non in pausa, ignoro richiesta di ripresa");
           return;
         }
-        // Se il timer è bloccato manualmente, non riprendere
         if (isTimerLocked) {
-          console.log("⚠️ Timer bloccato manualmente, non riprendo");
+          console.log("Timer bloccato manualmente, non riprendo");
           return;
         }
         isTimerPaused = false;
-        console.log("▶️ Timer ripreso - Tempo rimanente:", remainingTime);
+        console.log("Timer ripreso - Tempo rimanente:", remainingTime);
         updateTimerDisplay();
         startTimer();
       }
 
       function restartTimer(newDuration) {
-        console.log(`🔄 Riavvio timer con nuova durata: ${newDuration} secondi`);
+        console.log(`Riavvio timer con nuova durata: ${newDuration} secondi`);
 
         if (isTimerLocked) {
-          console.log("🔒 Timer bloccato manualmente, aggiorno solo la durata senza riavviare");
+          console.log("Timer bloccato manualmente, aggiorno solo la durata");
           totalTime = parseInt(newDuration) || 10;
           remainingTime = totalTime;
           updateTimerDisplay();
-          timerText.textContent = `${remainingTime}s (BLOCCATO)`;
-          timerBar.style.backgroundColor = "#ff5722";
+          timerText.className = "timer-text timer-locked";
+          timerText.textContent = `${remainingTime}s Bloccato`;
+          timerBar.style.backgroundColor = "var(--locked)";
           return;
         }
 
-        // Ferma il timer corrente
         if (timerInterval) {
           clearInterval(timerInterval);
         }
         clearTimeout(fallbackTimeout);
         isTimerPaused = false;
 
-        // Imposta la nuova durata
         totalTime = parseInt(newDuration) || 10;
         remainingTime = totalTime;
         updateTimerDisplay();
 
-        // Riavvia il timer
         startTimer();
 
-        // Mostra un feedback visivo temporaneo
-        timerBar.style.backgroundColor = "#2196f3";
+        timerText.className = "timer-text timer-info";
+        timerBar.style.backgroundColor = "var(--info)";
         setTimeout(() => {
           updateTimerDisplay();
         }, 500);
       }
 
-      // Gestione del tema
       function updateTheme() {
         const isDarkMode = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-
         if (isDarkMode) {
           document.documentElement.setAttribute("data-theme", "dark");
         } else {
@@ -703,7 +609,6 @@
 
       updateTheme();
 
-      // Ascolta i cambiamenti del tema di sistema
       if (window.matchMedia) {
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", updateTheme);
       }
