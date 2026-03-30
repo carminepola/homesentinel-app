@@ -60,7 +60,15 @@ function setupEventListeners() {
       if (dndStatus) {
         dndStatus.textContent = dndMode ? "Attivato" : "Disattivato";
       }
-      // Il processo principale gestirà l'aggiornamento dello stato DND
+      try {
+        await ipcRenderer.invoke("set-dnd-mode", dndMode);
+      } catch (error) {
+        console.error("Errore nell'impostazione della modalità DND:", error);
+        dndToggle.checked = !dndMode;
+        if (dndStatus) {
+          dndStatus.textContent = !dndMode ? "Attivato" : "Disattivato";
+        }
+      }
     });
   }
 
@@ -242,6 +250,14 @@ function updateUIFromSettings() {
   // Dark mode
   if (darkModeToggle && themeManager) {
     darkModeToggle.checked = themeManager.getCurrentTheme() === "dark";
+  }
+
+  // DND mode
+  if (dndToggle) {
+    dndToggle.checked = appSettings.dndMode || false;
+  }
+  if (dndStatus) {
+    dndStatus.textContent = appSettings.dndMode ? "Attivato" : "Disattivato";
   }
 
   // Update sensor mappings list

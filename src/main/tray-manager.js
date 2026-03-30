@@ -8,7 +8,8 @@ class TrayManager {
     this.mainWindow = null;
     this.settingsManager = settingsManager;
     this.tray = null;
-    this.dndMode = false;
+    const settings = settingsManager.getSettings();
+    this.dndMode = settings.dndMode || false;
     this.onDndModeChange = null;
     this.onQuit = null;
   }
@@ -100,7 +101,6 @@ class TrayManager {
         label: "Mostra finestra principale",
         click: () => {
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            debugger;
             this.mainWindow.show();
             this.mainWindow.focus();
           }
@@ -134,11 +134,23 @@ class TrayManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("dnd-mode-changed", this.dndMode);
     }
+    const settings = this.settingsManager.getSettings();
+    settings.dndMode = this.dndMode;
+    this.settingsManager.updateSettings(settings);
+    this.settingsManager.saveSettingsToFile();
   }
 
   setDndMode(enabled) {
     this.dndMode = enabled;
     this._updateContextMenu();
+    if (this.onDndModeChange) this.onDndModeChange(this.dndMode);
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("dnd-mode-changed", this.dndMode);
+    }
+    const settings = this.settingsManager.getSettings();
+    settings.dndMode = this.dndMode;
+    this.settingsManager.updateSettings(settings);
+    this.settingsManager.saveSettingsToFile();
   }
 
   getDndMode() {

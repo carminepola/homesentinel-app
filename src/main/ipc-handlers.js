@@ -1,12 +1,13 @@
 const { ipcMain, dialog } = require("electron");
 
 class IPCHandlers {
-  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager) {
+  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager) {
     this.mainWindow = mainWindow;
     this.settingsManager = settingsManager;
     this.websocketManager = websocketManager;
     this.pipWindowManager = pipWindowManager;
     this.autoStartManager = autoStartManager;
+    this.trayManager = trayManager;
 
     this.setupIpcHandlers();
   }
@@ -58,6 +59,14 @@ class IPCHandlers {
 
     ipcMain.handle("get-auto-start-status", async () => {
       return this.handleGetAutoStartStatus();
+    });
+
+    ipcMain.handle("set-dnd-mode", (event, enabled) => {
+      return this.handleSetDndMode(enabled);
+    });
+
+    ipcMain.handle("get-dnd-status", () => {
+      return this.handleGetDndStatus();
     });
   }
 
@@ -212,7 +221,7 @@ class IPCHandlers {
     }
   }
 
-  async handleGetCameraUrlWithToken(cameraIdm) {
+  async handleGetCameraUrlWithToken(cameraId) {
     const settings = this.settingsManager.getSettings();
 
     if (!settings.homeAssistantUrl || !settings.homeAssistantToken) {
@@ -235,11 +244,6 @@ class IPCHandlers {
       if (!cameraUrl) {
         return { error: "Impossibile ottenere l'URL della camera" };
       }
-
-      useHLS = false;
-
-
-
 
 
       return { url: cameraUrl, useHLS };
@@ -281,6 +285,22 @@ class IPCHandlers {
     } catch (error) {
       return { enabled: false, error: error.message };
     }
+  }
+
+  handleSetDndMode(enabled) {
+    if (this.trayManager) {
+      this.trayManager.setDndMode(enabled);
+      return { success: true };
+    }
+    return { success: false, error: "Tray manager non inizializzato" };
+  }
+
+  handleGetDndStatus() {
+    if (this.trayManager) {
+      return { enabled: this.trayManager.getDndMode() };
+    }
+    const settings = this.settingsManager.getSettings();
+    return { enabled: settings.dndMode || false };
   }
 }
 

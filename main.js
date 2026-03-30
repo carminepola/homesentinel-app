@@ -132,7 +132,6 @@ function setupEventCallbacks() {
 
   trayManager.setEventCallbacks({
     onDndModeChange: (dndMode) => {
-      mainWindow.webContents.send("dnd-mode-changed", dndMode);
     },
     onQuit: () => {
       isQuitting = true;
@@ -181,7 +180,7 @@ if (!gotTheLock) {
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
-      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager);
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager);
 
       setupEventCallbacks();
 

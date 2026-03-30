@@ -658,6 +658,16 @@
       function restartTimer(newDuration) {
         console.log(`🔄 Riavvio timer con nuova durata: ${newDuration} secondi`);
 
+        if (isTimerLocked) {
+          console.log("🔒 Timer bloccato manualmente, aggiorno solo la durata senza riavviare");
+          totalTime = parseInt(newDuration) || 10;
+          remainingTime = totalTime;
+          updateTimerDisplay();
+          timerText.textContent = `${remainingTime}s (BLOCCATO)`;
+          timerBar.style.backgroundColor = "#ff5722";
+          return;
+        }
+
         // Ferma il timer corrente
         if (timerInterval) {
           clearInterval(timerInterval);
