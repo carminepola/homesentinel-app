@@ -21,7 +21,7 @@ class PiPWindowManager {
     this.websocketManager = websocketManager;
   }
 
-  createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null, mjpegUrl = null) {
+  createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null) {
     if (!cameraUrl) {
       console.error("cameraUrl non fornito");
       return null;
@@ -93,7 +93,6 @@ class PiPWindowManager {
           useHLS: resolvedStreamType === "hls",
           streamType: resolvedStreamType,
           cameraName: cameraName,
-          mjpegUrl,
         });
 
         // Invia il messaggio per l'animazione di apertura
@@ -457,7 +456,6 @@ class PiPWindowManager {
         finalCameraUrl = cameraResult.url;
         cameraName = cameraResult.friendlyName;
         resolvedStreamType = cameraResult.streamType || "mjpeg";
-        const mjpegUrl = cameraResult.mjpegUrl || null;
       }
 
       const existingWindow = this.findWindowByCameraId(mapping.cameraId);
@@ -476,7 +474,7 @@ class PiPWindowManager {
       cameraSettings.position = settings.pipSettings.position || "top-right";
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType, mjpegUrl);
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType);
     if (result && mapping.cameraId) {
       this.windowCameraIdMap.set(result.id, mapping.cameraId);
     }
@@ -528,7 +526,6 @@ class PiPWindowManager {
     let finalCameraUrl = cameraUrl;
     let cameraName = null;
     let resolvedStreamType = null;
-    let mjpegUrl = null;
 
     const globalSettings = this.settingsManager.getSettings();
     const globalPosition = globalSettings.pipSettings?.position || "top-right";
@@ -574,7 +571,6 @@ class PiPWindowManager {
         finalCameraUrl = cameraResult.url;
         cameraName = cameraResult.friendlyName;
         resolvedStreamType = cameraResult.streamType || "mjpeg";
-        mjpegUrl = cameraResult.mjpegUrl || null;
       }
     }
 
@@ -582,7 +578,7 @@ class PiPWindowManager {
       resolvedStreamType = "mjpeg";
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType, mjpegUrl);
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType);
 
     if (result && cameraId) {
       this.windowCameraIdMap.set(result.id, cameraId);
