@@ -150,6 +150,11 @@ body {
   color: var(--error);
 }
 
+.hide-btn:hover {
+  background-color: var(--accent-light);
+  color: var(--accent);
+}
+
 .icon-btn {
   background: none;
   border: none;

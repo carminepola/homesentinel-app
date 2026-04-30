@@ -173,6 +173,13 @@ function setupEventListeners() {
     });
   }
 
+  const hideBtn = document.getElementById("hide-btn");
+  if (hideBtn) {
+    hideBtn.addEventListener("click", async () => {
+      await ipcRenderer.invoke("hide-window");
+    });
+  }
+
   // Event listener per il pulsante Esci
   const quitBtn = document.getElementById("quit-btn");
   if (quitBtn) {

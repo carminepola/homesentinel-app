@@ -70,6 +70,12 @@ class IPCHandlers {
       return this.handleGetDndStatus();
     });
 
+    ipcMain.handle("hide-window", () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.hide();
+      }
+    });
+
     ipcMain.handle("quit-app", () => {
       if (this.onQuitCallback) {
         this.onQuitCallback();
