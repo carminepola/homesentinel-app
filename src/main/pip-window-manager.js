@@ -21,111 +21,111 @@ class PiPWindowManager {
     this.websocketManager = websocketManager;
   }
 
-  createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null) {
-    if (!cameraUrl) {
-      console.error("cameraUrl non fornito");
-      return null;
-    }
+   createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null) {
+     if (!cameraUrl) {
+       console.error("cameraUrl non fornito");
+       return null;
+     }
 
-    // Verifica se il sistema è bloccato prima di creare la finestra
-    if (this.isSystemLocked) {
-      console.log("Creazione finestra PiP bloccata: sistema attualmente bloccato");
-      return null;
-    }
+     // Verifica se il sistema è bloccato prima di creare la finestra
+     if (this.isSystemLocked) {
+       console.log("Creazione finestra PiP bloccata: sistema attualmente bloccato");
+       return null;
+     }
 
-    cameraUrl = cameraUrl.replace("camera_proxy/", "camera_proxy_stream/");
+     cameraUrl = cameraUrl.replace("camera_proxy/", "camera_proxy_stream/");
 
-    const globalSettings = this.settingsManager.getSettings();
-    const globalPosition = globalSettings.pipSettings?.position || "top-right";
+     const globalSettings = this.settingsManager.getSettings();
+     const globalPosition = globalSettings.pipSettings?.position || "top-right";
 
-    if (!cameraSettings) {
-      cameraSettings = {
-        position: globalPosition,
-        size: "medium",
-      };
-    }
+     if (!cameraSettings) {
+       cameraSettings = {
+         position: globalPosition,
+         size: "medium",
+       };
+     }
 
-    if (!cameraSettings.position) {
-      cameraSettings.position = globalPosition;
-    }
+     if (!cameraSettings.position) {
+       cameraSettings.position = globalPosition;
+     }
 
-    // Definisci i percorsi delle icone
-    const iconPngPath = path.join(__dirname, appConfig.paths.iconPng);
-    const iconSvgPath = path.join(__dirname, "..", "..", "assets/icon.svg");
+     // Definisci i percorsi delle icone
+     const iconPngPath = path.join(__dirname, appConfig.paths.iconPng);
+     const iconSvgPath = path.join(__dirname, "..", "..", "assets/icon.svg");
 
-    // Usa SVG se esiste, altrimenti usa il PNG dalla configurazione
-    const pipIcon = require("fs").existsSync(iconSvgPath) ? iconSvgPath : iconPngPath;
+     // Usa SVG se esiste, altrimenti usa il PNG dalla configurazione
+     const pipIcon = require("fs").existsSync(iconSvgPath) ? iconSvgPath : iconPngPath;
 
-    const { width, height } = this.getCameraSize(cameraSettings.size, cameraSettings);
-    const { x, y } = this.calculatePosition(cameraSettings.position, width, height);
+     const { width, height } = this.getCameraSize(cameraSettings.size, cameraSettings);
+     const { x, y } = this.calculatePosition(cameraSettings.position, width, height);
 
-    try {
-      const pipWindow = new BrowserWindow({
-        width,
-        height,
-        x,
-        y,
-        icon: pipIcon, // Usa la variabile pipIcon
-        ...appConfig.pipWindow,
-        webPreferences: appConfig.pipWindow.webPreferences,
-      });
+     try {
+       const pipWindow = new BrowserWindow({
+         width,
+         height,
+         x,
+         y,
+         icon: pipIcon, // Usa la variabile pipIcon
+         ...appConfig.pipWindow,
+         webPreferences: appConfig.pipWindow.webPreferences,
+       });
 
-      pipWindow.loadFile(path.join(__dirname, "..", "..", "pip.html"));
+       pipWindow.loadFile(path.join(__dirname, "..", "..", "pip.html"));
 
-      pipWindow.once("ready-to-show", () => {
-        pipWindow.showInactive();
-        this.windowCameraMap.set(pipWindow.id, cameraUrl);
+       pipWindow.once("ready-to-show", () => {
+         pipWindow.showInactive();
+         this.windowCameraMap.set(pipWindow.id, cameraUrl);
 
-        const globalSettings = this.settingsManager.getSettings();
-        const useHLS = globalSettings.streamingSettings?.useHLS || false;
+         const globalSettings = this.settingsManager.getSettings();
+         const useHLS = globalSettings.streamingSettings?.useHLS || false;
 
-        let resolvedStreamType = streamType;
-        if (!resolvedStreamType) {
-          resolvedStreamType = "mjpeg";
-          if (useHLS && (cameraUrl.includes(".m3u8") || cameraUrl.includes("/api/hls/"))) {
-            resolvedStreamType = "hls";
-          }
-        }
+         let resolvedStreamType = streamType;
+         if (!resolvedStreamType) {
+           resolvedStreamType = "mjpeg";
+           if (useHLS && (cameraUrl.includes(".m3u8") || cameraUrl.includes("/api/hls/"))) {
+             resolvedStreamType = "hls";
+           }
+         }
 
-        pipWindow.webContents.send("load-camera", {
-          url: cameraUrl,
-          duration: duration || 10,
-          useHLS: resolvedStreamType === "hls",
-          streamType: resolvedStreamType,
-          cameraName: cameraName,
-        });
+         pipWindow.webContents.send("load-camera", {
+           url: cameraUrl,
+           duration: duration || 10,
+           useHLS: resolvedStreamType === "hls",
+           streamType: resolvedStreamType,
+           cameraName: cameraName,
+         });
 
-        // Invia il messaggio per l'animazione di apertura
-        setTimeout(() => {
-          pipWindow.webContents.send("window-open-anim");
-        }, 50);
-      });
+         // Invia il messaggio per l'animazione di apertura
+         setTimeout(() => {
+           pipWindow.webContents.send("window-open-anim");
+         }, 50);
+       });
 
-      pipWindow.on("closed", () => {
-        const index = this.pipWindows.indexOf(pipWindow);
-        if (index > -1) {
-          this.pipWindows.splice(index, 1);
-        }
+       pipWindow.on("closed", () => {
+         const index = this.pipWindows.indexOf(pipWindow);
+         if (index > -1) {
+           this.pipWindows.splice(index, 1);
+         }
 
-        this.windowCameraMap.delete(pipWindow.id);
-        this.windowCameraIdMap.delete(pipWindow.id);
-        this.windowPositionMap.delete(pipWindow.id);
-        this.windowSettingsMap.delete(pipWindow.id);
+         this.windowCameraMap.delete(pipWindow.id);
+         this.windowCameraIdMap.delete(pipWindow.id);
+         this.windowPositionMap.delete(pipWindow.id);
+         this.windowSettingsMap.delete(pipWindow.id);
 
-        // Riorganizza le finestre rimanenti
-        this.reorganizeWindows();
-      });
+         // Riorganizza le finestre rimanenti
+         this.reorganizeWindows();
+       });
 
-      this.pipWindows.push(pipWindow);
-      this.windowPositionMap.set(pipWindow.id, cameraSettings.position);
-      this.windowSettingsMap.set(pipWindow.id, cameraSettings);
+       this.pipWindows.push(pipWindow);
+       this.windowPositionMap.set(pipWindow.id, cameraSettings.position);
+       this.windowSettingsMap.set(pipWindow.id, cameraSettings);
 
-      return pipWindow;
-    } catch (error) {
-      console.error("Errore nella creazione della finestra PiP:", error);
-      return null;
-    }
-  }
+       return pipWindow;
+     } catch (error) {
+       console.error("Errore nella creazione della finestra PiP:", error);
+       return null;
+     }
+   }
 
   getCameraSize(size, cameraSettings = null) {
     if (cameraSettings && cameraSettings.width && cameraSettings.height) {
@@ -596,52 +596,39 @@ class PiPWindowManager {
     }));
   }
 
-  setupIpcHandlers() {
-    // Mantieni il vecchio metodo per compatibilità
-    ipcMain.on("move-pip-window", (event, { deltaX, deltaY }) => {
-      const pipWindow = BrowserWindow.fromWebContents(event.sender);
-      if (!pipWindow || pipWindow.isDestroyed()) return;
+   setupIpcHandlers() {
+     ipcMain.on("move-pip-window", (event, { deltaX, deltaY }) => {
+       const pipWindow = BrowserWindow.fromWebContents(event.sender);
+       if (!pipWindow || pipWindow.isDestroyed()) return;
 
-      const currentBounds = pipWindow.getBounds();
-      const newX = currentBounds.x + deltaX;
-      const newY = currentBounds.y + deltaY;
+       const currentBounds = pipWindow.getBounds();
+       const newX = currentBounds.x + deltaX;
+       const newY = currentBounds.y + deltaY;
 
-      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
-      const boundedX = Math.max(0, Math.min(newX, screenWidth - currentBounds.width));
-      const boundedY = Math.max(0, Math.min(newY, screenHeight - currentBounds.height));
+       const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+       const boundedX = Math.max(0, Math.min(newX, screenWidth - currentBounds.width));
+       const boundedY = Math.max(0, Math.min(newY, screenHeight - currentBounds.height));
 
-      pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY));
-    });
+       pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY));
+     });
 
-    // Nuovo metodo per impostare la posizione assoluta (più fluido)
-    ipcMain.on("set-window-position", (event, { x, y }) => {
-      const pipWindow = BrowserWindow.fromWebContents(event.sender);
-      if (!pipWindow || pipWindow.isDestroyed()) return;
+     ipcMain.on("set-window-position", (event, { x, y }) => {
+       const pipWindow = BrowserWindow.fromWebContents(event.sender);
+       if (!pipWindow || pipWindow.isDestroyed()) return;
 
-      const currentBounds = pipWindow.getBounds();
-      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+       const currentBounds = pipWindow.getBounds();
+       const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
 
-      // Assicurati che la finestra rimanga entro i limiti dello schermo
-      const boundedX = Math.max(0, Math.min(x, screenWidth - currentBounds.width));
-      const boundedY = Math.max(0, Math.min(y, screenHeight - currentBounds.height));
+       const boundedX = Math.max(0, Math.min(x, screenWidth - currentBounds.width));
+       const boundedY = Math.max(0, Math.min(y, screenHeight - currentBounds.height));
 
-      // Imposta la posizione in modo asincrono per migliorare la fluidità
-      setImmediate(() => {
-        if (!pipWindow.isDestroyed()) {
-          pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY), false);
-        }
-      });
-    });
-
-    // Nuovo metodo per ottenere la posizione attuale della finestra
-    ipcMain.on("get-window-position", (event) => {
-      const pipWindow = BrowserWindow.fromWebContents(event.sender);
-      if (!pipWindow || pipWindow.isDestroyed()) return;
-
-      const bounds = pipWindow.getBounds();
-      event.reply("window-position", { x: bounds.x, y: bounds.y });
-    });
-  }
+       setImmediate(() => {
+         if (!pipWindow.isDestroyed()) {
+           pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY), false);
+         }
+       });
+     });
+   }
 
   // Metodo per impostare lo stato di blocco del sistema
   setSystemLocked(locked) {

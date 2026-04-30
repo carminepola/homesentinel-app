@@ -47,6 +47,17 @@
               </svg>
             </button>
 
+            <button id="move-btn" class="move-btn" title="Sposta finestra">
+              <svg id="move-icon-default" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="5 9 2 12 5 15"></polyline>
+                <polyline points="9 5 12 2 15 5"></polyline>
+                <polyline points="15 19 12 22 9 19"></polyline>
+                <polyline points="19 9 22 12 19 15"></polyline>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <line x1="12" y1="2" x2="12" y2="22"></line>
+              </svg>
+            </button>
+
             <button id="timer-lock-btn" class="timer-lock-btn" title="Blocca/Sblocca Timer">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2v4"></path>
@@ -98,6 +109,7 @@
       const closeBtn = document.getElementById("close-btn");
       const floatingCloseBtn = document.getElementById("floating-close-btn");
       const audioBtn = document.getElementById("audio-btn");
+      const moveBtn = document.getElementById("move-btn");
       const timerBar = document.getElementById("timer-bar");
       const timerText = document.getElementById("timer-text");
       const timerLockBtn = document.getElementById("timer-lock-btn");
@@ -109,6 +121,10 @@
       let fallbackTimeout;
       let isTimerPaused = false;
       let isTimerLocked = false;
+
+      let isDragging = false;
+      let lastScreenX = 0;
+      let lastScreenY = 0;
 
       document.addEventListener("DOMContentLoaded", () => {
         setupEventListeners();
@@ -444,9 +460,40 @@
         audioBtn.addEventListener("click", toggleMute);
         timerLockBtn.addEventListener("click", toggleTimerLock);
 
+        moveBtn.addEventListener("mousedown", onMoveBtnDown);
+        document.addEventListener("mousemove", onDragMove);
+        document.addEventListener("mouseup", onDragEnd);
+
         pipContainer.addEventListener("contextmenu", (e) => {
           e.preventDefault();
         });
+      }
+
+      function onMoveBtnDown(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        isDragging = true;
+        lastScreenX = e.screenX;
+        lastScreenY = e.screenY;
+        pipContainer.classList.add("dragging");
+        moveBtn.classList.add("active");
+      }
+
+      function onDragMove(e) {
+        if (!isDragging) return;
+        const deltaX = e.screenX - lastScreenX;
+        const deltaY = e.screenY - lastScreenY;
+        lastScreenX = e.screenX;
+        lastScreenY = e.screenY;
+        if (deltaX === 0 && deltaY === 0) return;
+        ipcRenderer.send("move-pip-window", { deltaX, deltaY });
+      }
+
+      function onDragEnd() {
+        if (!isDragging) return;
+        isDragging = false;
+        pipContainer.classList.remove("dragging");
+        moveBtn.classList.remove("active");
       }
 
       function toggleMute() {

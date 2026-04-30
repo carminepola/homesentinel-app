@@ -304,6 +304,7 @@ body {
 
 .floating-close-btn,
 .audio-btn,
+.move-btn,
 .timer-lock-btn {
   width: 26px;
   height: 26px;
@@ -331,14 +332,27 @@ body {
 }
 
 .audio-btn:hover {
-  background: rgba(59, 130, 246, 0.8);
-  color: #fff;
-  transform: scale(1.08);
-}
+   background: rgba(59, 130, 246, 0.8);
+   color: #fff;
+   transform: scale(1.08);
+ }
 
 .audio-btn:active {
   transform: scale(0.95);
 }
+
+.move-btn:hover {
+   background: rgba(59, 130, 246, 0.8);
+   color: #fff;
+   transform: scale(1.08);
+ }
+
+.move-btn:active,
+.move-btn.active {
+   background: rgba(59, 130, 246, 0.9);
+   color: #fff;
+   transform: scale(0.95);
+ }
 
 .timer-lock-btn:hover {
   background: rgba(59, 130, 246, 0.8);
@@ -452,6 +466,7 @@ body {
 .pip-btn:focus,
 .floating-close-btn:focus,
 .audio-btn:focus,
+.move-btn:focus,
 .timer-lock-btn:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -465,6 +480,7 @@ body {
 
   .floating-close-btn,
   .audio-btn,
+  .move-btn,
   .timer-lock-btn {
     width: 22px;
     height: 22px;
