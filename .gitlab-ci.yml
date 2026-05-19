@@ -31,7 +31,7 @@ build_dev:
       - dist/*.AppImage
       - dist/*.deb
       - dist/*.rpm
-    expire_in: 2 days
+    
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
@@ -47,7 +47,7 @@ build_release:
     name: "$CI_COMMIT_TAG"
     paths:
       - dist/*
-  expire_in: 30 days
+  
   rules:
     - if: '$CI_COMMIT_TAG'
 
