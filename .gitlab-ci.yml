@@ -26,8 +26,8 @@ set_version:
       CURRENT_VERSION=$(node -p "require('./package.json').version")
       TAG_CHECK=$(git tag -l "v${CURRENT_VERSION}")
       if [ -n "$TAG_CHECK" ]; then
-        echo "Version v${CURRENT_VERSION} already released. Skipping pipeline."
-        exit 1
+        echo "Version v${CURRENT_VERSION} already released. Skipping build."
+        exit 0
       fi
       if [ "$CI_COMMIT_BRANCH" = "main" ]; then
         PIPELINE_TYPE="stable"
@@ -46,7 +46,7 @@ set_version:
       echo "RELEASE_NAME=$RELEASE_NAME" >> build.env
       echo "RELEASE_TAG=$RELEASE_TAG" >> build.env
       echo "Setting version to $BUILD_VERSION"
-      npm version --no-git-tag-version $BUILD_VERSION
+      node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='$BUILD_VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
   artifacts:
     reports:
       dotenv: build.env
@@ -59,6 +59,11 @@ build_appimage:
   stage: build
   needs: [set_version]
   script:
+    - |
+      if [ -z "$BUILD_VERSION" ]; then
+        echo "Version unchanged. Skipping build."
+        exit 0
+      fi
     - npm run build-appimage
     - |
       echo "APPIMAGE_JOB_ID=$CI_JOB_ID" >> appimage.env
@@ -73,7 +78,7 @@ build_appimage:
       dotenv: appimage.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" '
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
       changes:
         - package.json
 
@@ -81,6 +86,11 @@ build_deb:
   stage: build
   needs: [set_version]
   script:
+    - |
+      if [ -z "$BUILD_VERSION" ]; then
+        echo "Version unchanged. Skipping build."
+        exit 0
+      fi
     - npm run build-deb
     - |
       echo "DEB_JOB_ID=$CI_JOB_ID" >> deb.env
@@ -95,7 +105,7 @@ build_deb:
       dotenv: deb.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" '
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
       changes:
         - package.json
 
@@ -103,6 +113,11 @@ build_rpm:
   stage: build
   needs: [set_version]
   script:
+    - |
+      if [ -z "$BUILD_VERSION" ]; then
+        echo "Version unchanged. Skipping build."
+        exit 0
+      fi
     - npm run build-rpm
     - |
       echo "RPM_JOB_ID=$CI_JOB_ID" >> rpm.env
@@ -117,7 +132,7 @@ build_rpm:
       dotenv: rpm.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" '
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
       changes:
         - package.json
 
@@ -125,6 +140,11 @@ build_windows:
   stage: build
   needs: [set_version]
   script:
+    - |
+      if [ -z "$BUILD_VERSION" ]; then
+        echo "Version unchanged. Skipping build."
+        exit 0
+      fi
     - npm run build-win
     - |
       echo "WINDOWS_JOB_ID=$CI_JOB_ID" >> windows.env
@@ -139,7 +159,7 @@ build_windows:
       dotenv: windows.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" '
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
       changes:
         - package.json
 
@@ -161,6 +181,11 @@ create_release:
   before_script:
     - echo "skip"
   script:
+    - |
+      if [ -z "$BUILD_VERSION" ]; then
+        echo "Version unchanged. Skipping release."
+        exit 0
+      fi
     - echo "Creating $RELEASE_NAME ($RELEASE_TAG)"
     - ls dist/
   release:
