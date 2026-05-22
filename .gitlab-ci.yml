@@ -18,32 +18,30 @@ cache:
 
 before_script:
   - npm install
+  - npm audit --audit-level=critical
 
 set_version:
   stage: version
+  variables:
+    GIT_DEPTH: "0"
   script:
     - |
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        BUILD_VERSION="${CI_COMMIT_TAG#v}"
-        if [[ "$BUILD_VERSION" == *"-beta"* ]]; then
-          PIPELINE_TYPE="beta"
-          RELEASE_NAME="HA-Cam v${BUILD_VERSION} (Beta)"
-        else
-          PIPELINE_TYPE="stable"
-          RELEASE_NAME="HA-Cam v${BUILD_VERSION}"
-        fi
-        RELEASE_TAG="${CI_COMMIT_TAG}"
+      BUILD_VERSION="${CI_COMMIT_TAG#v}"
+      RELEASE_TAG="${CI_COMMIT_TAG}"
+      RELEASE_NAME="HA-Cam v${BUILD_VERSION}"
+
+      PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+      if [ -n "$PREVIOUS_TAG" ]; then
+        CHANGELOG=$(git log --pretty=format:"- %s" "${PREVIOUS_TAG}..${CI_COMMIT_TAG}" | sed 's/\\/\\\\/g; s/"/\\"/g')
       else
-        CURRENT_VERSION=$(node -p "require('./package.json').version")
-        BUILD_VERSION="${CURRENT_VERSION}-beta.${CI_PIPELINE_IID}"
-        PIPELINE_TYPE="beta"
-        RELEASE_NAME="HA-Cam v${BUILD_VERSION} (Beta)"
-        RELEASE_TAG="v${BUILD_VERSION}"
+        CHANGELOG=$(git log --pretty=format:"- %s" --max-count=20 | sed 's/\\/\\\\/g; s/"/\\"/g')
       fi
-      echo "PIPELINE_TYPE=$PIPELINE_TYPE" >> build.env
+      CHANGELOG_ENCODED=$(printf '%s\n' "$CHANGELOG" | awk '{printf "%s\\n", $0}')
+
       echo "BUILD_VERSION=$BUILD_VERSION" >> build.env
-      echo "RELEASE_NAME=$RELEASE_NAME" >> build.env
       echo "RELEASE_TAG=$RELEASE_TAG" >> build.env
+      echo "RELEASE_NAME=$RELEASE_NAME" >> build.env
+      echo "RELEASE_CHANGELOG=$CHANGELOG_ENCODED" >> build.env
       echo "Setting version to $BUILD_VERSION"
       node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.version='$BUILD_VERSION';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
   artifacts:
@@ -51,9 +49,6 @@ set_version:
       dotenv: build.env
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "dev"
-      changes:
-        - package.json
 
 build_appimage:
   stage: build
@@ -74,9 +69,6 @@ build_appimage:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "dev"
-      changes:
-        - package.json
 
 build_deb:
   stage: build
@@ -97,9 +89,6 @@ build_deb:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "dev"
-      changes:
-        - package.json
 
 build_rpm:
   stage: build
@@ -120,9 +109,6 @@ build_rpm:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "dev"
-      changes:
-        - package.json
 
 build_windows:
   stage: build
@@ -143,9 +129,6 @@ build_windows:
     expire_in: 30 days
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "dev"
-      changes:
-        - package.json
 
 create_release:
   stage: release
@@ -170,7 +153,7 @@ create_release:
   release:
     tag_name: $RELEASE_TAG
     name: $RELEASE_NAME
-    description: "## HA-Cam ${BUILD_VERSION} - ${PIPELINE_TYPE}\nCommit: ${CI_COMMIT_SHORT_SHA}\n\nScarica il pacchetto per la tua piattaforma dalla sezione Assets qui sotto."
+    description: "## HA-Cam ${BUILD_VERSION}\n\n### Commits\n\n${RELEASE_CHANGELOG}\n\nScarica il pacchetto per la tua piattaforma dalla sezione Assets qui sotto."
     assets:
       links:
         - name: "Windows Installer (.exe)"
