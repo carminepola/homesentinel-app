@@ -38,6 +38,71 @@ before_script:
   echo "RELEASE_NAME=$RELEASE_NAME" >> build.env
   echo "RELEASE_TAG=$RELEASE_TAG" >> build.env
 
+.build_linux_template: &build_linux_template
+  stage: build
+  needs: [set_version]
+  script:
+    - npm run $BUILD_CMD
+    - echo "$ENV_JOB_ID_VAR=$CI_JOB_ID" >> $ENV_FILE
+    - FILENAME=$(ls dist/$GLOB_PATTERN 2>/dev/null | head -1)
+    - BASENAME=$(basename "$FILENAME" 2>/dev/null)
+    - echo "$ENV_FILE_VAR=$BASENAME" >> $ENV_FILE
+    - echo "Found: $BASENAME"
+  artifacts:
+    paths:
+      - dist/$GLOB_PATTERN
+    reports:
+      dotenv: $ENV_FILE
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+
+build_appimage:
+  variables:
+    BUILD_CMD: build-appimage
+    ENV_JOB_ID_VAR: APPIMAGE_JOB_ID
+    ENV_FILE: appimage.env
+    ENV_FILE_VAR: APPIMAGE_FILE
+    GLOB_PATTERN: "*.AppImage"
+  <<: *build_linux_template
+
+build_deb:
+  variables:
+    BUILD_CMD: build-deb
+    ENV_JOB_ID_VAR: DEB_JOB_ID
+    ENV_FILE: deb.env
+    ENV_FILE_VAR: DEB_FILE
+    GLOB_PATTERN: "*.deb"
+  <<: *build_linux_template
+
+build_rpm:
+  variables:
+    BUILD_CMD: build-rpm
+    ENV_JOB_ID_VAR: RPM_JOB_ID
+    ENV_FILE: rpm.env
+    ENV_FILE_VAR: RPM_FILE
+    GLOB_PATTERN: "*.rpm"
+  <<: *build_linux_template
+
+build_windows:
+  stage: build
+  needs: [set_version]
+  script:
+    - npm run build-win
+    - echo "WINDOWS_JOB_ID=$CI_JOB_ID" >> windows.env
+    - FILENAME=$(ls dist/*.exe 2>/dev/null | head -1)
+    - BASENAME=$(basename "$FILENAME" 2>/dev/null)
+    - echo "EXE_FILE=$BASENAME" >> windows.env
+    - echo "Found: $BASENAME"
+  artifacts:
+    paths:
+      - dist/*.exe
+    reports:
+      dotenv: windows.env
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+
 set_version:
   stage: version
   script:
@@ -47,78 +112,6 @@ set_version:
   artifacts:
     reports:
       dotenv: build.env
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
-
-build_appimage:
-  stage: build
-  needs: [set_version]
-  script:
-    - npm run build-appimage
-    - echo "APPIMAGE_JOB_ID=$CI_JOB_ID" >> appimage.env
-    - "APPIMAGE_FILE=$(ls dist/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
-    - echo "APPIMAGE_FILE=$APPIMAGE_FILE" >> appimage.env
-    - echo "Found: $APPIMAGE_FILE"
-  artifacts:
-    paths:
-      - dist/*.AppImage
-    reports:
-      dotenv: appimage.env
-    expire_in: 30 days
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
-
-build_deb:
-  stage: build
-  needs: [set_version]
-  script:
-    - npm run build-deb
-    - echo "DEB_JOB_ID=$CI_JOB_ID" >> deb.env
-    - "DEB_FILE=$(ls dist/*.deb 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
-    - echo "DEB_FILE=$DEB_FILE" >> deb.env
-    - echo "Found: $DEB_FILE"
-  artifacts:
-    paths:
-      - dist/*.deb
-    reports:
-      dotenv: deb.env
-    expire_in: 30 days
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
-
-build_rpm:
-  stage: build
-  needs: [set_version]
-  script:
-    - npm run build-rpm
-    - echo "RPM_JOB_ID=$CI_JOB_ID" >> rpm.env
-    - "RPM_FILE=$(ls dist/*.rpm 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
-    - echo "RPM_FILE=$RPM_FILE" >> rpm.env
-    - echo "Found: $RPM_FILE"
-  artifacts:
-    paths:
-      - dist/*.rpm
-    reports:
-      dotenv: rpm.env
-    expire_in: 30 days
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
-
-build_windows:
-  stage: build
-  needs: [set_version]
-  script:
-    - npm run build-win
-    - echo "WINDOWS_JOB_ID=$CI_JOB_ID" >> windows.env
-    - "EXE_FILE=$(ls dist/*.exe 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
-    - echo "EXE_FILE=$EXE_FILE" >> windows.env
-    - echo "Found: $EXE_FILE"
-  artifacts:
-    paths:
-      - dist/*.exe
-    reports:
-      dotenv: windows.env
-    expire_in: 30 days
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
 
