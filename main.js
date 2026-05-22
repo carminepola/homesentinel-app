@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, powerMonitor } = require("electron");
+const { app, BrowserWindow, Menu, Notification, powerMonitor } = require("electron");
 const path = require("path");
 
 // Importa i moduli
@@ -143,8 +143,17 @@ function setupEventCallbacks() {
       }
     },
     onConnectionStatusChange: (isConnected) => {
+      const wasConnected = isWebSocketConnected;
       isWebSocketConnected = isConnected;
       mainWindow.webContents.send("connection-status-changed", isConnected);
+
+      if (wasConnected !== isConnected) {
+        new Notification({
+          title: appConfig.app.name,
+          body: isConnected ? "Connesso a Home Assistant" : "Disconnesso da Home Assistant",
+          silent: false,
+        }).show();
+      }
     },
   });
 
