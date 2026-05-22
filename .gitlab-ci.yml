@@ -89,17 +89,7 @@ create_release:
   release:
     tag_name: $RELEASE_TAG
     name: $RELEASE_NAME
-    description: |
-      ## HA-Cam ${BUILD_VERSION}
-
-      **Tipo:** ${PIPELINE_TYPE} — Commit: ${CI_COMMIT_SHORT_SHA}
-
-      ### Installazione
-
-      - **Windows:** Scarica il file `.exe`
-      - **Linux:** Scarica `.AppImage` (universale), `.deb` (Debian/Ubuntu) o `.rpm` (Fedora/openSUSE)
-
-      ${PIPELINE_TYPE} == "beta" && echo "⚠️ **Questa è una versione beta** — potrebbe contenere bug." || echo "✅ **Versione stabile** — pronta per la produzione."
+    description: "## HA-Cam ${BUILD_VERSION}\n\n**Tipo:** ${PIPELINE_TYPE} - Commit: ${CI_COMMIT_SHORT_SHA}\n\n### Installazione\n\n- **Windows:** Scarica il file .exe\n- **Linux:** Scarica .AppImage (universale), .deb (Debian/Ubuntu) o .rpm (Fedora/openSUSE)"
     assets:
       links:
         - name: "Windows (.exe)"
