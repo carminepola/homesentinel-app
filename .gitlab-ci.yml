@@ -19,99 +19,112 @@ cache:
 before_script:
   - npm install
 
-.determine_version: &determine_version |
-  CURRENT_VERSION=$(node -p "require('./package.json').version")
-  if [ "$CI_COMMIT_BRANCH" = "main" ]; then
-    PIPELINE_TYPE="stable"
-    BUILD_VERSION="${CURRENT_VERSION}+${CI_PIPELINE_IID}"
-    RELEASE_NAME="HA-Cam v${BUILD_VERSION}"
-    RELEASE_TAG="v${BUILD_VERSION}"
-  else
-    PIPELINE_TYPE="beta"
-    BUILD_VERSION="${CURRENT_VERSION}-beta.${CI_PIPELINE_IID}"
-    RELEASE_NAME="HA-Cam v${BUILD_VERSION} (Beta)"
-    RELEASE_TAG="v${BUILD_VERSION}"
-  fi
-  echo "CURRENT_VERSION=$CURRENT_VERSION" >> build.env
-  echo "PIPELINE_TYPE=$PIPELINE_TYPE" >> build.env
-  echo "BUILD_VERSION=$BUILD_VERSION" >> build.env
-  echo "RELEASE_NAME=$RELEASE_NAME" >> build.env
-  echo "RELEASE_TAG=$RELEASE_TAG" >> build.env
-
-.build_linux_template: &build_linux_template
-  stage: build
-  needs: [set_version]
+set_version:
+  stage: version
   script:
-    - npm run $BUILD_CMD
-    - echo "$ENV_JOB_ID_VAR=$CI_JOB_ID" >> $ENV_FILE
-    - FILENAME=$(ls dist/$GLOB_PATTERN 2>/dev/null | head -1)
-    - BASENAME=$(basename "$FILENAME" 2>/dev/null)
-    - echo "$ENV_FILE_VAR=$BASENAME" >> $ENV_FILE
-    - echo "Found: $BASENAME"
+    - |
+      CURRENT_VERSION=$(node -p "require('./package.json').version")
+      if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        PIPELINE_TYPE="stable"
+        BUILD_VERSION="${CURRENT_VERSION}+${CI_PIPELINE_IID}"
+        RELEASE_NAME="HA-Cam v${BUILD_VERSION}"
+        RELEASE_TAG="v${BUILD_VERSION}"
+      else
+        PIPELINE_TYPE="beta"
+        BUILD_VERSION="${CURRENT_VERSION}-beta.${CI_PIPELINE_IID}"
+        RELEASE_NAME="HA-Cam v${BUILD_VERSION} (Beta)"
+        RELEASE_TAG="v${BUILD_VERSION}"
+      fi
+      echo "CURRENT_VERSION=$CURRENT_VERSION" >> build.env
+      echo "PIPELINE_TYPE=$PIPELINE_TYPE" >> build.env
+      echo "BUILD_VERSION=$BUILD_VERSION" >> build.env
+      echo "RELEASE_NAME=$RELEASE_NAME" >> build.env
+      echo "RELEASE_TAG=$RELEASE_TAG" >> build.env
+      echo "Setting version to $BUILD_VERSION"
+      npm version --no-git-tag-version $BUILD_VERSION
   artifacts:
-    paths:
-      - dist/$GLOB_PATTERN
     reports:
-      dotenv: $ENV_FILE
-    expire_in: 30 days
+      dotenv: build.env
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
 
 build_appimage:
-  variables:
-    BUILD_CMD: build-appimage
-    ENV_JOB_ID_VAR: APPIMAGE_JOB_ID
-    ENV_FILE: appimage.env
-    ENV_FILE_VAR: APPIMAGE_FILE
-    GLOB_PATTERN: "*.AppImage"
-  <<: *build_linux_template
+  stage: build
+  needs: [set_version]
+  script:
+    - npm run build-appimage
+    - |
+      echo "APPIMAGE_JOB_ID=$CI_JOB_ID" >> appimage.env
+      FILENAME=$(ls dist/*.AppImage 2>/dev/null | head -1)
+      BASENAME=$(basename "$FILENAME" 2>/dev/null)
+      echo "APPIMAGE_FILE=$BASENAME" >> appimage.env
+      echo "Found: $BASENAME"
+  artifacts:
+    paths:
+      - dist/*.AppImage
+    reports:
+      dotenv: appimage.env
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
 
 build_deb:
-  variables:
-    BUILD_CMD: build-deb
-    ENV_JOB_ID_VAR: DEB_JOB_ID
-    ENV_FILE: deb.env
-    ENV_FILE_VAR: DEB_FILE
-    GLOB_PATTERN: "*.deb"
-  <<: *build_linux_template
+  stage: build
+  needs: [set_version]
+  script:
+    - npm run build-deb
+    - |
+      echo "DEB_JOB_ID=$CI_JOB_ID" >> deb.env
+      FILENAME=$(ls dist/*.deb 2>/dev/null | head -1)
+      BASENAME=$(basename "$FILENAME" 2>/dev/null)
+      echo "DEB_FILE=$BASENAME" >> deb.env
+      echo "Found: $BASENAME"
+  artifacts:
+    paths:
+      - dist/*.deb
+    reports:
+      dotenv: deb.env
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
 
 build_rpm:
-  variables:
-    BUILD_CMD: build-rpm
-    ENV_JOB_ID_VAR: RPM_JOB_ID
-    ENV_FILE: rpm.env
-    ENV_FILE_VAR: RPM_FILE
-    GLOB_PATTERN: "*.rpm"
-  <<: *build_linux_template
+  stage: build
+  needs: [set_version]
+  script:
+    - npm run build-rpm
+    - |
+      echo "RPM_JOB_ID=$CI_JOB_ID" >> rpm.env
+      FILENAME=$(ls dist/*.rpm 2>/dev/null | head -1)
+      BASENAME=$(basename "$FILENAME" 2>/dev/null)
+      echo "RPM_FILE=$BASENAME" >> rpm.env
+      echo "Found: $BASENAME"
+  artifacts:
+    paths:
+      - dist/*.rpm
+    reports:
+      dotenv: rpm.env
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
 
 build_windows:
   stage: build
   needs: [set_version]
   script:
     - npm run build-win
-    - echo "WINDOWS_JOB_ID=$CI_JOB_ID" >> windows.env
-    - FILENAME=$(ls dist/*.exe 2>/dev/null | head -1)
-    - BASENAME=$(basename "$FILENAME" 2>/dev/null)
-    - echo "EXE_FILE=$BASENAME" >> windows.env
-    - echo "Found: $BASENAME"
+    - |
+      echo "WINDOWS_JOB_ID=$CI_JOB_ID" >> windows.env
+      FILENAME=$(ls dist/*.exe 2>/dev/null | head -1)
+      BASENAME=$(basename "$FILENAME" 2>/dev/null)
+      echo "EXE_FILE=$BASENAME" >> windows.env
+      echo "Found: $BASENAME"
   artifacts:
     paths:
       - dist/*.exe
     reports:
       dotenv: windows.env
     expire_in: 30 days
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
-
-set_version:
-  stage: version
-  script:
-    - *determine_version
-    - echo "Setting version to $BUILD_VERSION"
-    - npm version --no-git-tag-version $BUILD_VERSION
-  artifacts:
-    reports:
-      dotenv: build.env
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
 
