@@ -27,7 +27,7 @@
   "homepage": "https://github.com/carminepola/home-assistant-pip-monitor",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^29.1.1",
+    "electron": "^42.2.0",
     "electron-builder": "^26.0.12"
   },
   "build": {

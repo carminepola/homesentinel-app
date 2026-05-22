@@ -31,7 +31,7 @@ set_version:
       fi
       if [ "$CI_COMMIT_BRANCH" = "main" ]; then
         PIPELINE_TYPE="stable"
-        BUILD_VERSION="${CURRENT_VERSION}+${CI_PIPELINE_IID}"
+        BUILD_VERSION="${CURRENT_VERSION}"
         RELEASE_NAME="HA-Cam v${BUILD_VERSION}"
         RELEASE_TAG="v${BUILD_VERSION}"
       else
