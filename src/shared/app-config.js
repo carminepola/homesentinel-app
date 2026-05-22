@@ -3,6 +3,7 @@ const appConfig = {
   // Informazioni sull'applicazione
   app: {
     name: "Ha-Cam",
+    updateUrl: "https://git.devmin.it/api/v4/projects/24/releases",
   },
 
   // Percorsi delle risorse

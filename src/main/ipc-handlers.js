@@ -1,4 +1,5 @@
-const { ipcMain, dialog, app } = require("electron");
+const { ipcMain, dialog, app, shell } = require("electron");
+const appConfig = require("../shared/app-config");
 
 class IPCHandlers {
   constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, onQuitCallback) {
@@ -87,6 +88,14 @@ class IPCHandlers {
       const version = app.getVersion();
       const isBeta = version.includes("-beta");
       return { version, isBeta };
+    });
+
+    ipcMain.handle("check-for-updates", async () => {
+      return this.handleCheckForUpdates();
+    });
+
+    ipcMain.handle("open-release-page", (event, url) => {
+      shell.openExternal(url);
     });
 
     ipcMain.handle("test-alarm", () => {
@@ -332,6 +341,63 @@ class IPCHandlers {
     }
     const settings = this.settingsManager.getSettings();
     return { enabled: settings.dndMode || false };
+  }
+
+  async handleCheckForUpdates() {
+    try {
+      const currentVersion = app.getVersion();
+      const isBeta = currentVersion.includes("-beta");
+      const url = appConfig.app.updateUrl;
+      if (!url) {
+        return { error: "URL aggiornamenti non configurato" };
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const releases = await response.json();
+      if (!releases || releases.length === 0) {
+        return { hasUpdate: false, currentVersion };
+      }
+
+      const latestRelease = releases[0];
+      const tagName = (latestRelease.tag_name || "").replace(/^v/, "");
+
+      const isUpdateAvailable = this.compareVersions(tagName, currentVersion) > 0;
+
+      let assetUrls = [];
+      if (latestRelease.assets && latestRelease.assets.links) {
+        assetUrls = latestRelease.assets.links.map((link) => ({
+          name: link.name,
+          url: link.url,
+        }));
+      }
+
+      return {
+        hasUpdate: isUpdateAvailable,
+        currentVersion,
+        latestVersion: tagName,
+        releaseUrl: latestRelease._links?.self || "",
+        releaseDescription: latestRelease.description || "",
+        isBeta: isBeta,
+        assets: assetUrls,
+      };
+    } catch (error) {
+      return { error: error.message, currentVersion: app.getVersion() };
+    }
+  }
+
+  compareVersions(a, b) {
+    const clean = (v) => v.replace(/^v/, "").split(/[+\-]/)[0];
+    const pa = clean(a).split(".").map(Number);
+    const pb = clean(b).split(".").map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    }
+    return 0;
   }
 }
 

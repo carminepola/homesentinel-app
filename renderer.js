@@ -220,6 +220,16 @@ function setupEventListeners() {
     });
   }
 
+  const checkUpdateBtn = document.getElementById("check-update-btn");
+  if (checkUpdateBtn) {
+    checkUpdateBtn.addEventListener("click", async () => {
+      checkUpdateBtn.textContent = "Verifica...";
+      checkUpdateBtn.disabled = true;
+      await checkForUpdates();
+      checkUpdateBtn.disabled = false;
+    });
+  }
+
   // Funzione per mostrare/nascondere i campi personalizzati
   function toggleCustomSizeFields(selectId, containerId) {
     const select = document.getElementById(selectId);
@@ -728,15 +738,64 @@ async function loadAutoStartStatus() {
 
 async function loadAppVersion() {
   try {
-    const { version, isBeta } = await ipcRenderer.invoke("get-app-version");
+    const { version } = await ipcRenderer.invoke("get-app-version");
     const el = document.getElementById("app-version");
     if (el) {
-      const channel = isBeta ? "beta" : "stable";
-      el.textContent = `v${version} (${channel})`;
-      el.classList.add(isBeta ? "beta" : "stable");
+      el.textContent = `v${version}`;
     }
   } catch (error) {
     console.error("Errore nel caricamento della versione:", error);
+  }
+}
+
+async function checkForUpdates() {
+  try {
+    const result = await ipcRenderer.invoke("check-for-updates");
+    const content = document.getElementById("update-status-content");
+    const btn = document.getElementById("check-update-btn");
+    if (!content) return;
+
+    if (result.error) {
+      content.innerHTML = `<span class="status-text" style="color: var(--text-tertiary)">Impossibile verificare gli aggiornamenti</span>`;
+      if (btn) btn.textContent = "Verifica Aggiornamenti";
+      return;
+    }
+
+    if (result.hasUpdate) {
+      content.innerHTML = `
+        <div class="update-available">
+          <div class="update-info">
+            <span class="update-icon">&#x2191;</span>
+            <span>Nuova versione disponibile: <strong>v${result.latestVersion}</strong></span>
+          </div>
+          <span class="status-text" style="color: var(--text-tertiary); font-size: 0.8125rem">Installata: v${result.currentVersion}</span>
+          <button id="open-downloads-btn" class="btn primary" style="margin-top: 0.5rem">Scarica Aggiornamento</button>
+        </div>`;
+
+      const dlBtn = document.getElementById("open-downloads-btn");
+      if (dlBtn && result.assets && result.assets.length > 0) {
+        dlBtn.addEventListener("click", () => {
+          const platform = process.platform;
+          let assetUrl = "";
+          if (platform === "win32") {
+            assetUrl = result.assets.find((a) => a.name.endsWith(".exe"))?.url || "";
+          } else if (platform === "linux") {
+            assetUrl = result.assets.find((a) => a.name.endsWith(".AppImage"))?.url || "";
+          }
+          if (assetUrl) {
+            ipcRenderer.invoke("open-release-page", assetUrl);
+          } else if (result.releaseUrl) {
+            ipcRenderer.invoke("open-release-page", result.releaseUrl);
+          }
+        });
+      }
+      if (btn) btn.textContent = "Verifica Aggiornamenti";
+    } else {
+      content.innerHTML = `<span class="status-text" style="color: var(--success)">L'app e aggiornata (v${result.currentVersion})</span>`;
+      if (btn) btn.textContent = "Verifica Aggiornamenti";
+    }
+  } catch (error) {
+    console.error("Errore nel check aggiornamenti:", error);
   }
 }
 

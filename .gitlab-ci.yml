@@ -24,6 +24,11 @@ set_version:
   script:
     - |
       CURRENT_VERSION=$(node -p "require('./package.json').version")
+      TAG_CHECK=$(git tag -l "v${CURRENT_VERSION}")
+      if [ -n "$TAG_CHECK" ]; then
+        echo "Version v${CURRENT_VERSION} already released. Skipping pipeline."
+        exit 1
+      fi
       if [ "$CI_COMMIT_BRANCH" = "main" ]; then
         PIPELINE_TYPE="stable"
         BUILD_VERSION="${CURRENT_VERSION}+${CI_PIPELINE_IID}"
@@ -46,7 +51,9 @@ set_version:
     reports:
       dotenv: build.env
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main" '
+      changes:
+        - package.json
 
 build_appimage:
   stage: build
@@ -66,7 +73,9 @@ build_appimage:
       dotenv: appimage.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main" '
+      changes:
+        - package.json
 
 build_deb:
   stage: build
@@ -86,7 +95,9 @@ build_deb:
       dotenv: deb.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main" '
+      changes:
+        - package.json
 
 build_rpm:
   stage: build
@@ -106,7 +117,9 @@ build_rpm:
       dotenv: rpm.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main" '
+      changes:
+        - package.json
 
 build_windows:
   stage: build
@@ -126,7 +139,9 @@ build_windows:
       dotenv: windows.env
     expire_in: 30 days
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main" '
+      changes:
+        - package.json
 
 create_release:
   stage: release
@@ -167,4 +182,6 @@ create_release:
           url: "${CI_PROJECT_URL}/-/jobs/${RPM_JOB_ID}/artifacts/raw/dist/${RPM_FILE}"
           link_type: "package"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main" '
+      changes:
+        - package.json

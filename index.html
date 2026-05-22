@@ -98,6 +98,7 @@
                 <span id="dnd-status" class="status-text">Disattivato</span>
               </div>
             </div>
+
           </div>
 
           <!-- Sensori Tab -->
@@ -253,6 +254,15 @@
             </div>
 
             <div class="card">
+              <h2>Informazioni</h2>
+              <div class="version-info">
+                <span class="version-badge" id="app-version"></span>
+                <button id="check-update-btn" class="btn secondary" style="margin-left: 0.75rem">Verifica Aggiornamenti</button>
+              </div>
+              <div id="update-status-content" style="margin-top: 0.75rem"></div>
+            </div>
+
+            <div class="card">
               <h2>Gestione Impostazioni</h2>
               <div class="form-actions">
                 <button id="export-settings-btn" class="btn secondary">Esporta Impostazioni</button>
@@ -398,10 +408,6 @@
             </div>
           </div>
     </div>
-
-    <footer class="app-footer">
-      <span class="version-badge" id="app-version"></span>
-    </footer>
 
     <script src="renderer.js"></script>
   </body>

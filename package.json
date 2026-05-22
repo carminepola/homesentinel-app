@@ -10,7 +10,11 @@
     "build-appimage": "electron-builder --linux AppImage",
     "build-deb": "electron-builder --linux deb",
     "build-rpm": "electron-builder --linux rpm",
-    "build-linux": "electron-builder --linux"
+    "build-linux": "electron-builder --linux",
+    "version-patch": "npm version patch --no-git-tag-version",
+    "version-minor": "npm version minor --no-git-tag-version",
+    "version-major": "npm version major --no-git-tag-version"
+
   },
   "keywords": [
     "home-assistant",

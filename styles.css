@@ -1023,25 +1023,13 @@ input[type="password"]::placeholder {
   font-size: 0.875rem;
 }
 
-.app-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  padding: 0.375rem 1rem;
-  pointer-events: none;
-  z-index: 50;
-}
-
 .version-badge {
-  font-size: 0.6875rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
+  font-weight: 600;
   color: var(--text-tertiary);
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
-  padding: 0.125rem 0.5rem;
+  padding: 0.25rem 0.75rem;
   border-radius: var(--radius-full);
   letter-spacing: 0.01em;
 }
@@ -1058,8 +1046,33 @@ input[type="password"]::placeholder {
   border-color: var(--success);
 }
 
+.version-info {
+  display: flex;
+  align-items: center;
+}
+
 @media (max-width: 768px) {
-  .app-footer {
-    bottom: 0.25rem;
+  .version-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
+}
+
+.update-available {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.update-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.update-icon {
+  font-size: 1.125rem;
+  color: var(--success);
 }
