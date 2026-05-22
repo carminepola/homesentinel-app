@@ -56,7 +56,7 @@ build_appimage:
   script:
     - npm run build-appimage
     - echo "APPIMAGE_JOB_ID=$CI_JOB_ID" >> appimage.env
-    - APPIMAGE_FILE=$(ls dist/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - "APPIMAGE_FILE=$(ls dist/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
     - echo "APPIMAGE_FILE=$APPIMAGE_FILE" >> appimage.env
     - echo "Found: $APPIMAGE_FILE"
   artifacts:
@@ -74,7 +74,7 @@ build_deb:
   script:
     - npm run build-deb
     - echo "DEB_JOB_ID=$CI_JOB_ID" >> deb.env
-    - DEB_FILE=$(ls dist/*.deb 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - "DEB_FILE=$(ls dist/*.deb 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
     - echo "DEB_FILE=$DEB_FILE" >> deb.env
     - echo "Found: $DEB_FILE"
   artifacts:
@@ -92,7 +92,7 @@ build_rpm:
   script:
     - npm run build-rpm
     - echo "RPM_JOB_ID=$CI_JOB_ID" >> rpm.env
-    - RPM_FILE=$(ls dist/*.rpm 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - "RPM_FILE=$(ls dist/*.rpm 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
     - echo "RPM_FILE=$RPM_FILE" >> rpm.env
     - echo "Found: $RPM_FILE"
   artifacts:
@@ -110,7 +110,7 @@ build_windows:
   script:
     - npm run build-win
     - echo "WINDOWS_JOB_ID=$CI_JOB_ID" >> windows.env
-    - EXE_FILE=$(ls dist/*.exe 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - "EXE_FILE=$(ls dist/*.exe 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo '')"
     - echo "EXE_FILE=$EXE_FILE" >> windows.env
     - echo "Found: $EXE_FILE"
   artifacts:
