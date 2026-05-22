@@ -762,6 +762,9 @@ async function checkForUpdates() {
     }
 
     if (result.hasUpdate) {
+      const changelogHtml = result.releaseDescription
+        ? `<div class="changelog" style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.8125rem; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${result.releaseDescription.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`
+        : "";
       content.innerHTML = `
         <div class="update-available">
           <div class="update-info">
@@ -769,6 +772,7 @@ async function checkForUpdates() {
             <span>Nuova versione disponibile: <strong>v${result.latestVersion}</strong></span>
           </div>
           <span class="status-text" style="color: var(--text-tertiary); font-size: 0.8125rem">Installata: v${result.currentVersion}</span>
+          ${changelogHtml}
           <button id="open-downloads-btn" class="btn primary" style="margin-top: 0.5rem">Scarica Aggiornamento</button>
         </div>`;
 

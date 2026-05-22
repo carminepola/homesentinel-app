@@ -75,7 +75,7 @@ class PiPWindowManager {
         pipWindow.loadFile(path.join(__dirname, "..", "..", "pip.html"));
 
         pipWindow.once("ready-to-show", () => {
-          pipWindow.setPosition(x, y);
+          pipWindow.setBounds({ x, y, width, height });
           pipWindow.showInactive();
          this.windowCameraMap.set(pipWindow.id, cameraUrl);
 

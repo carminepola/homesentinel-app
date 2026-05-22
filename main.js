@@ -1,7 +1,13 @@
-const { app, BrowserWindow, Menu, Notification, powerMonitor } = require("electron");
-const path = require("path");
+const { app } = require("electron");
 
-app.commandLine.appendSwitch("ozone-platform", "x11");
+if (process.platform === "linux" && !process.argv.includes("--ozone-platform=x11")) {
+  app.relaunch({ args: [...process.argv.slice(1), "--ozone-platform=x11"] });
+  app.exit(0);
+  return;
+}
+
+const { BrowserWindow, Menu, Notification, powerMonitor } = require("electron");
+const path = require("path");
 
 // Importa i moduli
 const SettingsManager = require("./src/shared/settings-manager");

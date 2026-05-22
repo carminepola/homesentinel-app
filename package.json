@@ -62,7 +62,11 @@
         "deb"
       ],
       "icon": "assets/icons",
-      "category": "Utility"
+      "category": "Utility",
+      "desktop": {
+        "Exec": "ha-cam --ozone-platform-hint=x11 %U",
+        "Environment": "ELECTRON_OZONE_PLATFORM_HINT=x11"
+      }
     }
   },
   "dependencies": {
