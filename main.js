@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Menu, Notification, powerMonitor } = require("electron");
 const path = require("path");
 
+app.commandLine.appendSwitch("ozone-platform", "x11");
+
 // Importa i moduli
 const SettingsManager = require("./src/shared/settings-manager");
 const WebSocketManager = require("./src/main/websocket-manager");

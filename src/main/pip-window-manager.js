@@ -57,23 +57,26 @@ class PiPWindowManager {
      const pipIcon = require("fs").existsSync(iconSvgPath) ? iconSvgPath : iconPngPath;
 
      const { width, height } = this.getCameraSize(cameraSettings.size, cameraSettings);
-     const { x, y } = this.calculatePosition(cameraSettings.position, width, height);
+      const { x, y } = this.calculatePosition(cameraSettings.position, width, height);
 
-     try {
-       const pipWindow = new BrowserWindow({
-         width,
-         height,
-         x,
-         y,
-         icon: pipIcon, // Usa la variabile pipIcon
-         ...appConfig.pipWindow,
-         webPreferences: appConfig.pipWindow.webPreferences,
-       });
+      try {
+        const { webPreferences, ...windowOptions } = appConfig.pipWindow;
+        const pipWindow = new BrowserWindow({
+          width,
+          height,
+          x,
+          y,
+          icon: pipIcon,
+          ...windowOptions,
+          focusable: true,
+          webPreferences,
+        });
 
-       pipWindow.loadFile(path.join(__dirname, "..", "..", "pip.html"));
+        pipWindow.loadFile(path.join(__dirname, "..", "..", "pip.html"));
 
-       pipWindow.once("ready-to-show", () => {
-         pipWindow.showInactive();
+        pipWindow.once("ready-to-show", () => {
+          pipWindow.setPosition(x, y);
+          pipWindow.showInactive();
          this.windowCameraMap.set(pipWindow.id, cameraUrl);
 
          const globalSettings = this.settingsManager.getSettings();
