@@ -50,19 +50,56 @@ set_version:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
 
-build_linux:
+build_appimage:
   stage: build
   needs: [set_version]
   script:
-    - npm run build-linux
-    - echo "LINUX_JOB_ID=$CI_JOB_ID" >> linux.env
+    - npm run build-appimage
+    - echo "APPIMAGE_JOB_ID=$CI_JOB_ID" >> appimage.env
+    - APPIMAGE_FILE=$(ls dist/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - echo "APPIMAGE_FILE=$APPIMAGE_FILE" >> appimage.env
+    - echo "Found: $APPIMAGE_FILE"
   artifacts:
     paths:
       - dist/*.AppImage
+    reports:
+      dotenv: appimage.env
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+
+build_deb:
+  stage: build
+  needs: [set_version]
+  script:
+    - npm run build-deb
+    - echo "DEB_JOB_ID=$CI_JOB_ID" >> deb.env
+    - DEB_FILE=$(ls dist/*.deb 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - echo "DEB_FILE=$DEB_FILE" >> deb.env
+    - echo "Found: $DEB_FILE"
+  artifacts:
+    paths:
       - dist/*.deb
+    reports:
+      dotenv: deb.env
+    expire_in: 30 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
+
+build_rpm:
+  stage: build
+  needs: [set_version]
+  script:
+    - npm run build-rpm
+    - echo "RPM_JOB_ID=$CI_JOB_ID" >> rpm.env
+    - RPM_FILE=$(ls dist/*.rpm 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - echo "RPM_FILE=$RPM_FILE" >> rpm.env
+    - echo "Found: $RPM_FILE"
+  artifacts:
+    paths:
       - dist/*.rpm
     reports:
-      dotenv: linux.env
+      dotenv: rpm.env
     expire_in: 30 days
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
@@ -73,6 +110,9 @@ build_windows:
   script:
     - npm run build-win
     - echo "WINDOWS_JOB_ID=$CI_JOB_ID" >> windows.env
+    - EXE_FILE=$(ls dist/*.exe 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+    - echo "EXE_FILE=$EXE_FILE" >> windows.env
+    - echo "Found: $EXE_FILE"
   artifacts:
     paths:
       - dist/*.exe
@@ -86,7 +126,11 @@ create_release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs:
-    - job: build_linux
+    - job: build_appimage
+      artifacts: true
+    - job: build_deb
+      artifacts: true
+    - job: build_rpm
       artifacts: true
     - job: build_windows
       artifacts: true
@@ -105,16 +149,16 @@ create_release:
     assets:
       links:
         - name: "Windows Installer (.exe)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${WINDOWS_JOB_ID}/artifacts/raw/dist/Ha-cam Setup ${BUILD_VERSION}.exe"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${WINDOWS_JOB_ID}/artifacts/raw/dist/${EXE_FILE}"
           link_type: "package"
         - name: "Linux AppImage"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${LINUX_JOB_ID}/artifacts/raw/dist/Ha-cam-${BUILD_VERSION}.AppImage"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${APPIMAGE_JOB_ID}/artifacts/raw/dist/${APPIMAGE_FILE}"
           link_type: "package"
         - name: "Linux Debian/Ubuntu (.deb)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${LINUX_JOB_ID}/artifacts/raw/dist/ha-cam_${BUILD_VERSION}_amd64.deb"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${DEB_JOB_ID}/artifacts/raw/dist/${DEB_FILE}"
           link_type: "package"
         - name: "Linux Fedora/openSUSE (.rpm)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${LINUX_JOB_ID}/artifacts/raw/dist/ha-cam-${BUILD_VERSION}.x86_64.rpm"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${RPM_JOB_ID}/artifacts/raw/dist/${RPM_FILE}"
           link_type: "package"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'

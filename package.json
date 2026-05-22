@@ -7,6 +7,9 @@
     "start": "electron .",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
+    "build-appimage": "electron-builder --linux --target AppImage",
+    "build-deb": "electron-builder --linux --target deb",
+    "build-rpm": "electron-builder --linux --target rpm",
     "build-linux": "electron-builder --linux"
   },
   "keywords": [
