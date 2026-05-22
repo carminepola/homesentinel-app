@@ -37,6 +37,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Carica lo stato dell'avvio automatico
   await loadAutoStartStatus();
 
+  // Carica la versione dell'app
+  await loadAppVersion();
+
   // Carica i dispositivi Home Assistant se configurato
   if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
     await loadHomeAssistantDevices();
@@ -720,6 +723,20 @@ async function loadAutoStartStatus() {
     }
   } catch (error) {
     console.error("Errore nel caricamento dello stato dell'avvio automatico:", error);
+  }
+}
+
+async function loadAppVersion() {
+  try {
+    const { version, isBeta } = await ipcRenderer.invoke("get-app-version");
+    const el = document.getElementById("app-version");
+    if (el) {
+      const channel = isBeta ? "beta" : "stable";
+      el.textContent = `v${version} (${channel})`;
+      el.classList.add(isBeta ? "beta" : "stable");
+    }
+  } catch (error) {
+    console.error("Errore nel caricamento della versione:", error);
   }
 }
 

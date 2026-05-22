@@ -1,4 +1,4 @@
-const { ipcMain, dialog } = require("electron");
+const { ipcMain, dialog, app } = require("electron");
 
 class IPCHandlers {
   constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, onQuitCallback) {
@@ -81,6 +81,12 @@ class IPCHandlers {
       if (this.onQuitCallback) {
         this.onQuitCallback();
       }
+    });
+
+    ipcMain.handle("get-app-version", () => {
+      const version = app.getVersion();
+      const isBeta = version.includes("-beta");
+      return { version, isBeta };
     });
 
     ipcMain.handle("test-alarm", () => {

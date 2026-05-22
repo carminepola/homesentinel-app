@@ -1022,3 +1022,44 @@ input[type="password"]::placeholder {
   padding: 2rem 1rem;
   font-size: 0.875rem;
 }
+
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0.375rem 1rem;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.version-badge {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.01em;
+}
+
+.version-badge.beta {
+  color: var(--warning-text);
+  background: var(--warning-light);
+  border-color: var(--warning);
+}
+
+.version-badge.stable {
+  color: var(--success-text);
+  background: var(--success-light);
+  border-color: var(--success);
+}
+
+@media (max-width: 768px) {
+  .app-footer {
+    bottom: 0.25rem;
+  }
+}
