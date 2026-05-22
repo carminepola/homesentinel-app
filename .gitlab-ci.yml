@@ -79,34 +79,46 @@ build_windows:
 create_release:
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
-  needs: [build_linux, build_windows, set_version]
+  needs:
+    - job: build_linux
+      artifacts: true
+    - job: build_windows
+      artifacts: true
+    - job: set_version
   variables:
     GIT_STRATEGY: none
   before_script:
-    - echo "Skipping npm install for release job"
+    - echo "skip"
   script:
+    - echo "Artifacts in dist/:"
+    - ls -la dist/
     - echo "Creating $RELEASE_NAME ($RELEASE_TAG)"
-  release:
-    tag_name: $RELEASE_TAG
-    name: $RELEASE_NAME
-    description: "## HA-Cam ${BUILD_VERSION}\n\n**Tipo:** ${PIPELINE_TYPE} - Commit: ${CI_COMMIT_SHORT_SHA}\n\n### Installazione\n\n- **Windows:** Scarica il file .exe\n- **Linux:** Scarica .AppImage (universale), .deb (Debian/Ubuntu) o .rpm (Fedora/openSUSE)"
-    assets:
-      links:
-        - name: "Windows (.exe)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/artifacts/${CI_COMMIT_REF_NAME}/raw/dist/Ha-cam-Setup.exe?job=build_windows"
-          link_type: "package"
-          filepath: "/Ha-cam-Setup.exe"
-        - name: "Linux AppImage"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/artifacts/${CI_COMMIT_REF_NAME}/raw/dist/Ha-cam-${BUILD_VERSION}.AppImage?job=build_linux"
-          link_type: "package"
-          filepath: "/Ha-cam-AppImage"
-        - name: "Linux .deb"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/artifacts/${CI_COMMIT_REF_NAME}/raw/dist/ha-cam_${BUILD_VERSION}_amd64.deb?job=build_linux"
-          link_type: "package"
-          filepath: "/Ha-cam.deb"
-        - name: "Linux .rpm"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/artifacts/${CI_COMMIT_REF_NAME}/raw/dist/ha-cam-${BUILD_VERSION}.x86_64.rpm?job=build_linux"
-          link_type: "package"
-          filepath: "/Ha-cam.rpm"
+    - |
+      ASSETS_ARGS=""
+      for job_name in build_linux build_windows; do
+        JOB_ID=$(curl --silent "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs?scope=success&per_page=50" \
+          --header "JOB-TOKEN: ${CI_JOB_TOKEN}" | jq -r ".[] | select(.name==\"${job_name}\") | .id" | head -1)
+        echo "Found job ${job_name} with ID ${JOB_ID}"
+        for file in $(curl --silent "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${JOB_ID}/artifacts" \
+          --header "JOB-TOKEN: ${CI_JOB_TOKEN}" | jq -r ".[].name" 2>/dev/null); do
+          FILE_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${JOB_ID}/artifacts/raw/${file}"
+          echo "Adding asset: ${file}"
+          ASSETS_ARGS="${ASSETS_ARGS} --assets-link {\"name\":\"${file}\",\"url\":\"${FILE_URL}\",\"link_type\":\"package\"}"
+        done
+      done
+    - echo "Release assets: ${ASSETS_ARGS}"
+    - |
+      release-cli create \
+        --name "$RELEASE_NAME" \
+        --tag-name "$RELEASE_TAG" \
+        --description "## HA-Cam ${BUILD_VERSION}
+
+      **Tipo:** ${PIPELINE_TYPE} - Commit: ${CI_COMMIT_SHORT_SHA}
+
+      ### Installazione
+
+      - **Windows:** Scarica il file .exe
+      - **Linux:** Scarica .AppImage (universale), .deb (Debian/Ubuntu) o .rpm (Fedora/openSUSE)" \
+        ${ASSETS_ARGS}
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
