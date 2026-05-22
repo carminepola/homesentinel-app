@@ -1,0 +1,552 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  background: #0a0000;
+  color: #fff;
+  user-select: none;
+}
+
+.alarm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #1a0505 0%, #0a0000 60%, #000 100%);
+  animation: alarmOverlayIn 0.4s ease-out;
+}
+
+@keyframes alarmOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.alarm-bg-animation {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.alarm-bg-animation::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(239, 68, 68, 0.08) 0%, transparent 70%);
+  animation: alarmPulse 2s ease-in-out infinite;
+}
+
+.alarm-bg-animation::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, transparent 0%, rgba(239, 68, 68, 0.03) 10%, transparent 20%);
+  animation: alarmRotate 8s linear infinite;
+}
+
+@keyframes alarmPulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes alarmRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.alarm-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.5rem 2rem;
+  max-width: 1100px;
+  width: 100%;
+  animation: alarmContentIn 0.5s ease-out 0.1s both;
+}
+
+@keyframes alarmContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.alarm-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1.25rem;
+  text-align: left;
+}
+
+.alarm-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.alarm-icon-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  animation: iconPulse 2s ease-in-out infinite;
+}
+
+.alarm-icon-pulse::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  border: 2px solid rgba(239, 68, 68, 0.1);
+  animation: iconRing 2s ease-in-out infinite 0.3s;
+}
+
+.alarm-icon-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -45px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 68, 68, 0.05);
+  animation: iconRing 2s ease-in-out infinite 0.6s;
+}
+
+@keyframes iconPulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+@keyframes iconRing {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.08); opacity: 0.7; }
+}
+
+.alarm-icon {
+  position: relative;
+  color: #ef4444;
+  filter: drop-shadow(0 0 20px rgba(239, 68, 68, 0.5));
+  animation: iconBlink 1.5s ease-in-out infinite;
+  width: 44px;
+  height: 44px;
+}
+
+@keyframes iconBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.alarm-title {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #ef4444;
+  text-shadow: 0 0 30px rgba(239, 68, 68, 0.4), 0 0 60px rgba(239, 68, 68, 0.2);
+  animation: titleGlow 2s ease-in-out infinite;
+}
+
+@keyframes titleGlow {
+  0%, 100% { text-shadow: 0 0 30px rgba(239, 68, 68, 0.4), 0 0 60px rgba(239, 68, 68, 0.2); }
+  50% { text-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 0 80px rgba(239, 68, 68, 0.3); }
+}
+
+.alarm-subtitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.02em;
+}
+
+.alarm-info-grid {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 600px;
+}
+
+.alarm-info-card {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.625rem 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  backdrop-filter: blur(10px);
+}
+
+.alarm-info-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.alarm-info-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  font-variant-numeric: tabular-nums;
+}
+
+.alarm-info-value.alarm-state {
+  color: #ef4444;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.alarm-cameras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.alarm-camera-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.alarm-camera-header {
+  padding: 0.625rem 0.875rem;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.alarm-camera-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: cameraDotPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes cameraDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.alarm-camera-feed {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.alarm-camera-feed img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.alarm-camera-feed video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.alarm-camera-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.8125rem;
+}
+
+.alarm-camera-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(239, 68, 68, 0.6);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.alarm-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.alarm-dismiss-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+  backdrop-filter: blur(10px);
+}
+
+.alarm-dismiss-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.15);
+  transform: translateY(-1px);
+}
+
+.alarm-dismiss-btn:active {
+  transform: translateY(0);
+}
+
+.alarm-dismiss-btn svg {
+  flex-shrink: 0;
+}
+
+.alarm-pin-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  align-items: center;
+  justify-content: center;
+  animation: pinModalIn 0.2s ease-out;
+}
+
+.alarm-pin-modal.show {
+  display: flex;
+}
+
+@keyframes pinModalIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.alarm-pin-container {
+  background: rgba(20, 5, 5, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 16px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  animation: pinContainerIn 0.25s ease-out;
+}
+
+@keyframes pinContainerIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.alarm-pin-container h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.alarm-pin-subtitle {
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.alarm-pin-input-group {
+  display: flex;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.alarm-cameras::-webkit-scrollbar {
+  width: 4px;
+}
+
+.alarm-cameras::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.alarm-cameras::-webkit-scrollbar-thumb {
+  background: rgba(239, 68, 68, 0.3);
+  border-radius: 999px;
+}
+
+.alarm-cameras::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.5);
+}
+
+.alarm-pin-input {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 1.25rem;
+  font-family: 'Inter', sans-serif;
+  text-align: center;
+  letter-spacing: 0.3em;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.alarm-pin-input:focus {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.alarm-pin-submit {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  cursor: pointer;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.alarm-pin-submit:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.alarm-pin-error {
+  font-size: 0.8125rem;
+  color: #ef4444;
+  min-height: 1.2em;
+}
+
+.alarm-pin-cancel {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  font-family: 'Inter', sans-serif;
+}
+
+.alarm-pin-cancel:hover {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.alarm-siren-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  display: flex;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.siren-wave {
+  flex: 1;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #ef4444, transparent);
+  animation: sirenMove 2s linear infinite;
+}
+
+.siren-wave:nth-child(2) { animation-delay: -0.4s; }
+.siren-wave:nth-child(3) { animation-delay: -0.8s; }
+.siren-wave:nth-child(4) { animation-delay: -1.2s; }
+.siren-wave:nth-child(5) { animation-delay: -1.6s; }
+
+@keyframes sirenMove {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@media (max-width: 768px) {
+  .alarm-title {
+    font-size: 2rem;
+    letter-spacing: 0.1em;
+  }
+
+  .alarm-icon-wrapper {
+    width: 100px;
+    height: 100px;
+  }
+
+  .alarm-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .alarm-info-grid {
+    flex-direction: column;
+  }
+
+  .alarm-cameras {
+    grid-template-columns: 1fr;
+    max-height: 30vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

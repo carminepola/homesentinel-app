@@ -67,6 +67,9 @@ const appConfig = {
     vertical: { width: 200, height: 360 },
   },
 
+  // Configurazione finestra allarme
+  alarmWindowHtml: "alarm.html",
+
   // Posizioni predefinite per le finestre PiP
   pipPositions: {
     "top-left": { offsetX: 20, offsetY: 20 },

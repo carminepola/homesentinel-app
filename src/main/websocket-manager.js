@@ -14,11 +14,13 @@ class WebSocketManager {
 
     this.onSensorEvent = null;
     this.onConnectionStatusChange = null;
+    this.onAlarmEvent = null;
   }
 
   setEventCallbacks(callbacks) {
     this.onSensorEvent = callbacks.onSensorEvent;
     this.onConnectionStatusChange = callbacks.onConnectionStatusChange;
+    this.onAlarmEvent = callbacks.onAlarmEvent || null;
   }
 
   connectToHomeAssistant() {
@@ -101,7 +103,8 @@ class WebSocketManager {
   subscribeToStateChanges() {
     const settings = this.settingsManager.getSettings();
 
-    if (settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0) {
+    if (settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0 ||
+        (settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId)) {
       setTimeout(() => {
         const subscriptionId = this.getNextSubscriptionId();
         const message = {
@@ -149,6 +152,32 @@ class WebSocketManager {
     const sensorState = new_state?.state || "unknown";
     const previousState = old_state?.state || "unknown";
     this.sensorStates.set(entity_id, sensorState);
+
+    if (entity_id.startsWith("alarm_control_panel.")) {
+      const alarmSettings = settings.alarmSettings || {};
+      if (alarmSettings.enabled && alarmSettings.sensorId === entity_id) {
+        const friendlyName = new_state?.attributes?.friendly_name || entity_id;
+
+        if (sensorState.toLowerCase() === "triggered") {
+          if (this.onAlarmEvent) {
+            this.onAlarmEvent({
+              entity_id,
+              sensorState,
+              previousState,
+              sensorName: friendlyName,
+            });
+          }
+        } else if (this.onAlarmEvent && previousState?.toLowerCase() === "triggered") {
+          this.onAlarmEvent({
+            entity_id,
+            sensorState,
+            previousState,
+            sensorName: friendlyName,
+            dismissed: true,
+          });
+        }
+      }
+    }
 
     if (this.onSensorEvent) {
       this.onSensorEvent({
@@ -209,9 +238,11 @@ class WebSocketManager {
 
     const settings = this.settingsManager.getSettings();
     const hasMappings = settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0;
+    const alarmEnabled = settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId;
+    const needsSubscription = hasMappings || alarmEnabled;
     const isSubscribed = Array.from(this.subscriptionIds.values()).includes("state_changed");
 
-    if (hasMappings && !isSubscribed) {
+    if (needsSubscription && !isSubscribed) {
       const subscriptionId = this.getNextSubscriptionId();
       const message = {
         id: subscriptionId,
@@ -221,7 +252,7 @@ class WebSocketManager {
 
       this.wsConnection.send(JSON.stringify(message));
       this.subscriptionIds.set(subscriptionId, "state_changed");
-    } else if (!hasMappings && isSubscribed) {
+    } else if (!needsSubscription && isSubscribed) {
       const stateChangedSubscriptionId = Array.from(this.subscriptionIds.entries())
         .find(([id, type]) => type === "state_changed")?.[0];
       

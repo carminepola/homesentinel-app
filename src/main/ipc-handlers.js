@@ -1,11 +1,12 @@
 const { ipcMain, dialog } = require("electron");
 
 class IPCHandlers {
-  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager, onQuitCallback) {
+  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, onQuitCallback) {
     this.mainWindow = mainWindow;
     this.settingsManager = settingsManager;
     this.websocketManager = websocketManager;
     this.pipWindowManager = pipWindowManager;
+    this.alarmWindowManager = alarmWindowManager;
     this.autoStartManager = autoStartManager;
     this.trayManager = trayManager;
     this.onQuitCallback = onQuitCallback;
@@ -81,6 +82,13 @@ class IPCHandlers {
         this.onQuitCallback();
       }
     });
+
+    ipcMain.handle("test-alarm", () => {
+      return this.alarmWindowManager.triggerAlarm({
+        sensorName: "Test Allarme",
+        state: "triggered",
+      });
+    });
   }
 
   async handleSaveSettings(settings) {
@@ -105,9 +113,12 @@ class IPCHandlers {
       this.websocketManager.connectToHomeAssistant();
     } else {
       const mappingsChanged = JSON.stringify(oldSettings.sensorCameraMappings) !==
-                           JSON.stringify(settings.sensorCameraMappings);
+                            JSON.stringify(settings.sensorCameraMappings);
 
-      if (mappingsChanged) {
+      const alarmChanged = JSON.stringify(oldSettings.alarmSettings) !==
+                         JSON.stringify(settings.alarmSettings);
+
+      if (mappingsChanged || alarmChanged) {
         this.websocketManager.updateSubscriptions();
       }
     }
@@ -137,7 +148,8 @@ class IPCHandlers {
       const states = await response.json();
       const sensors = states.filter((state) =>
         state.entity_id.startsWith("binary_sensor.") ||
-        state.entity_id.startsWith("input_boolean.")
+        state.entity_id.startsWith("input_boolean.") ||
+        state.entity_id.startsWith("alarm_control_panel.")
       );
       const cameras = states.filter((state) =>
         state.entity_id.startsWith("camera.")

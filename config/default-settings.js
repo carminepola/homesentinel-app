@@ -1,4 +1,3 @@
-// Impostazioni predefinite per l'applicazione
 const defaultSettings = {
   homeAssistantUrl: "",
   homeAssistantToken: "",
@@ -18,6 +17,12 @@ const defaultSettings = {
   },
   streamingSettings: {
     useHLS: false,
+  },
+  alarmSettings: {
+    enabled: false,
+    sensorId: "",
+    pinEnabled: false,
+    pin: "",
   },
 };
 

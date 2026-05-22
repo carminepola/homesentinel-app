@@ -5,6 +5,7 @@ const path = require("path");
 const SettingsManager = require("./src/shared/settings-manager");
 const WebSocketManager = require("./src/main/websocket-manager");
 const PiPWindowManager = require("./src/main/pip-window-manager");
+const AlarmWindowManager = require("./src/main/alarm-window-manager");
 const TrayManager = require("./src/main/tray-manager");
 const AutoStartManager = require("./src/main/auto-start-manager");
 const IPCHandlers = require("./src/main/ipc-handlers");
@@ -16,6 +17,7 @@ let isQuitting = false;
 let settingsManager;
 let websocketManager;
 let pipWindowManager;
+let alarmWindowManager;
 let trayManager;
 let autoStartManager;
 let ipcHandlers;
@@ -116,6 +118,8 @@ function initializeManagers() {
   websocketManager = new WebSocketManager(settingsManager);
   pipWindowManager = new PiPWindowManager(settingsManager);
   pipWindowManager.setWebSocketManager(websocketManager);
+  alarmWindowManager = new AlarmWindowManager(settingsManager);
+  alarmWindowManager.setWebSocketManager(websocketManager);
   trayManager = new TrayManager(settingsManager);
   autoStartManager = new AutoStartManager(settingsManager);
   // ipcHandlers verrà inizializzato dopo la creazione della finestra
@@ -130,6 +134,13 @@ function setupEventCallbacks() {
         return;
       }
       pipWindowManager.handleSensorEvent(eventData);
+    },
+    onAlarmEvent: (alarmData) => {
+      if (alarmData.dismissed) {
+        alarmWindowManager.dismissAlarm(alarmData.sensorState);
+      } else {
+        alarmWindowManager.triggerAlarm(alarmData);
+      }
     },
     onConnectionStatusChange: (isConnected) => {
       isWebSocketConnected = isConnected;
@@ -190,7 +201,7 @@ if (!gotTheLock) {
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
-      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, autoStartManager, trayManager, () => {
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, () => {
         isQuitting = true;
         app.quit();
       });
@@ -249,6 +260,9 @@ if (!gotTheLock) {
     try {
       if (pipWindowManager) {
         pipWindowManager.closeAllPiPWindows();
+      }
+      if (alarmWindowManager) {
+        alarmWindowManager.closeAlarmWindow();
       }
       if (websocketManager) {
         websocketManager.closeConnection();

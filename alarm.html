@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Allarme - HA-Cam</title>
+    <link rel="stylesheet" href="alarm-styles.css" />
+  </head>
+  <body>
+    <div class="alarm-overlay">
+      <div class="alarm-bg-animation"></div>
+
+      <div class="alarm-content">
+        <div class="alarm-header">
+          <div class="alarm-icon-wrapper">
+            <div class="alarm-icon-pulse"></div>
+            <svg class="alarm-icon" xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+          </div>
+          <h1 class="alarm-title">ALLARME ATTIVO</h1>
+          <p class="alarm-subtitle" id="alarm-sensor-name">Sensore di allarme</p>
+        </div>
+
+        <div class="alarm-info-grid">
+          <div class="alarm-info-card">
+            <span class="alarm-info-label">Stato</span>
+            <span class="alarm-info-value alarm-state" id="alarm-state">Triggered</span>
+          </div>
+          <div class="alarm-info-card">
+            <span class="alarm-info-label">Inizio</span>
+            <span class="alarm-info-value" id="alarm-start-time">--:--:--</span>
+          </div>
+          <div class="alarm-info-card">
+            <span class="alarm-info-label">Durata</span>
+            <span class="alarm-info-value" id="alarm-duration">00:00</span>
+          </div>
+        </div>
+
+        <div class="alarm-cameras" id="alarm-cameras"></div>
+
+        <div class="alarm-actions">
+          <button class="alarm-dismiss-btn" id="alarm-dismiss-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            Silenzia Allarme
+          </button>
+        </div>
+
+        <div class="alarm-pin-modal" id="alarm-pin-modal">
+          <div class="alarm-pin-container">
+            <h3>Inserisci PIN</h3>
+            <p class="alarm-pin-subtitle">Per chiudere la finestra di allarme</p>
+            <div class="alarm-pin-input-group">
+              <input type="password" id="alarm-pin-input" class="alarm-pin-input" maxlength="6" placeholder="PIN" />
+              <button class="alarm-pin-submit" id="alarm-pin-submit">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+            <p class="alarm-pin-error" id="alarm-pin-error"></p>
+            <button class="alarm-pin-cancel" id="alarm-pin-cancel">Annulla</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="alarm-siren-bar">
+        <div class="siren-wave"></div>
+        <div class="siren-wave"></div>
+        <div class="siren-wave"></div>
+        <div class="siren-wave"></div>
+        <div class="siren-wave"></div>
+      </div>
+    </div>
+
+    <script src="alarm-renderer.js"></script>
+  </body>
+</html>

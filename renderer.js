@@ -89,7 +89,6 @@ function setupEventListeners() {
         const result = await ipcRenderer.invoke("set-auto-start", enabled);
         if (!result.success) {
           console.error("Errore nell'impostazione dell'avvio automatico:", result.error);
-          // Ripristina lo stato precedente se c'è stato un errore
           autoStartToggle.checked = !enabled;
           alert(`Impossibile ${enabled ? "attivare" : "disattivare"} l'avvio automatico: ${result.error}`);
         }
@@ -97,6 +96,28 @@ function setupEventListeners() {
         console.error("Errore nell'impostazione dell'avvio automatico:", error);
         autoStartToggle.checked = !enabled;
         alert(`Errore nell'impostazione dell'avvio automatico: ${error.message}`);
+      }
+    });
+  }
+
+  // Event listener per il toggle allarme
+  const alarmEnabledToggle = document.getElementById("alarm-enabled");
+  if (alarmEnabledToggle) {
+    alarmEnabledToggle.addEventListener("change", () => {
+      const fields = document.getElementById("alarm-config-fields");
+      if (fields) {
+        fields.style.display = alarmEnabledToggle.checked ? "block" : "none";
+      }
+    });
+  }
+
+  // Event listener per il toggle PIN allarme
+  const alarmPinEnabled = document.getElementById("alarm-pin-enabled");
+  if (alarmPinEnabled) {
+    alarmPinEnabled.addEventListener("change", () => {
+      const pinGroup = document.getElementById("alarm-pin-group");
+      if (pinGroup) {
+        pinGroup.style.display = alarmPinEnabled.checked ? "block" : "none";
       }
     });
   }
@@ -185,6 +206,14 @@ function setupEventListeners() {
   if (quitBtn) {
     quitBtn.addEventListener("click", async () => {
       await ipcRenderer.invoke("quit-app");
+    });
+  }
+
+  // Event listener per il test allarme
+  const testAlarmBtn = document.getElementById("test-alarm-btn");
+  if (testAlarmBtn) {
+    testAlarmBtn.addEventListener("click", async () => {
+      await ipcRenderer.invoke("test-alarm");
     });
   }
 
@@ -280,6 +309,29 @@ function updateUIFromSettings() {
   const useHls = document.getElementById("use-hls");
   if (useHls) useHls.checked = appSettings.streamingSettings?.useHLS || false;
 
+  // Alarm settings
+  const alarmEnabled = document.getElementById("alarm-enabled");
+  if (alarmEnabled) alarmEnabled.checked = appSettings.alarmSettings?.enabled || false;
+
+  const alarmSensor = document.getElementById("alarm-sensor");
+  if (alarmSensor) alarmSensor.value = appSettings.alarmSettings?.sensorId || "";
+
+  const alarmConfigFields = document.getElementById("alarm-config-fields");
+  if (alarmConfigFields) {
+    alarmConfigFields.style.display = appSettings.alarmSettings?.enabled ? "block" : "none";
+  }
+
+  const alarmPinEnabled = document.getElementById("alarm-pin-enabled");
+  if (alarmPinEnabled) alarmPinEnabled.checked = appSettings.alarmSettings?.pinEnabled || false;
+
+  const alarmPin = document.getElementById("alarm-pin");
+  if (alarmPin) alarmPin.value = appSettings.alarmSettings?.pin || "";
+
+  const alarmPinGroup = document.getElementById("alarm-pin-group");
+  if (alarmPinGroup) {
+    alarmPinGroup.style.display = appSettings.alarmSettings?.pinEnabled ? "block" : "none";
+  }
+
   // Dark mode
   if (darkModeToggle && themeManager) {
     darkModeToggle.checked = themeManager.getCurrentTheme() === "dark";
@@ -320,6 +372,12 @@ async function saveSettings() {
     },
     streamingSettings: {
       useHLS: document.getElementById("use-hls")?.checked || false,
+    },
+    alarmSettings: {
+      enabled: document.getElementById("alarm-enabled")?.checked || false,
+      sensorId: document.getElementById("alarm-sensor")?.value || "",
+      pinEnabled: document.getElementById("alarm-pin-enabled")?.checked || false,
+      pin: document.getElementById("alarm-pin")?.value || "",
     },
     sensorCameraMappings: appSettings.sensorCameraMappings || [],
   };
@@ -397,6 +455,7 @@ async function loadHomeAssistantDevices() {
 
     homeAssistantDevices = devices;
     updateDeviceSelects();
+    restoreAlarmSensorValue();
     updateConnectionStatus(true);
 
     // Aggiorna i dispositivi nel MappingManager
@@ -448,6 +507,27 @@ function updateDeviceSelects() {
       option.textContent = camera.attributes.friendly_name || camera.entity_id;
       cameraSelect.appendChild(option);
     });
+  }
+
+  const alarmSensorSelect = document.getElementById("alarm-sensor");
+  if (alarmSensorSelect) {
+    alarmSensorSelect.innerHTML = '<option value="">-- Seleziona un sensore --</option>';
+
+    homeAssistantDevices.sensors.forEach((sensor) => {
+      if (sensor.entity_id.startsWith("alarm_control_panel.")) {
+        const option = document.createElement("option");
+        option.value = sensor.entity_id;
+        option.textContent = sensor.attributes.friendly_name || sensor.entity_id;
+        alarmSensorSelect.appendChild(option);
+      }
+    });
+  }
+}
+
+function restoreAlarmSensorValue() {
+  const alarmSensorSelect = document.getElementById("alarm-sensor");
+  if (alarmSensorSelect && appSettings.alarmSettings?.sensorId) {
+    alarmSensorSelect.value = appSettings.alarmSettings.sensorId;
   }
 }
 

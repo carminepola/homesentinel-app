@@ -221,6 +221,38 @@
             </div>
 
             <div class="card">
+              <h2>Allarme</h2>
+              <div class="toggle-container" style="margin-bottom: 1rem">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="alarm-enabled" />
+                  <span class="slider"></span>
+                </label>
+                <span class="status-text">Abilita allarme a tutto schermo</span>
+              </div>
+              <div id="alarm-config-fields">
+                <div class="form-group">
+                  <label for="alarm-sensor">Sensore Allarme (alarm_control_panel)</label>
+                  <select id="alarm-sensor">
+                    <option value="">-- Seleziona un sensore --</option>
+                  </select>
+                  <p class="help-text">Seleziona un'entita' alarm_control_panel. L'allarme si attivera' quando lo stato diventa "triggered".</p>
+                </div>
+                <div class="toggle-container" style="margin-bottom: 1rem">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="alarm-pin-enabled" />
+                    <span class="slider"></span>
+                  </label>
+                  <span class="status-text">Richiedi PIN per disattivare</span>
+                </div>
+                <div class="form-group" id="alarm-pin-group" style="display: none">
+                  <label for="alarm-pin">PIN di sicurezza</label>
+                  <input type="password" id="alarm-pin" placeholder="Inserisci il PIN numerico" maxlength="6" />
+                  <p class="help-text">Il PIN verra' richiesto per chiudere la finestra di allarme.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
               <h2>Gestione Impostazioni</h2>
               <div class="form-actions">
                 <button id="export-settings-btn" class="btn secondary">Esporta Impostazioni</button>
@@ -276,6 +308,12 @@
                 </div>
               </div>
               <button id="test-pip-btn" class="btn primary">Avvia Test PiP</button>
+            </div>
+
+            <div class="card">
+              <h2>Test Allarme</h2>
+              <p class="help-text">Anteprima la schermata di allarme a tutto schermo per verificare l'interfaccia.</p>
+              <button id="test-alarm-btn" class="btn primary">Test Allarme</button>
             </div>
           </div>
         </div>
@@ -346,8 +384,19 @@
         <div class="modal-footer">
           <button id="save-mapping-btn" class="btn primary">Salva</button>
           <button id="cancel-mapping-btn" class="btn secondary">Annulla</button>
-        </div>
-      </div>
+            </div>
+
+            <div class="status-card">
+              <h2>Modalita Non Disturbare</h2>
+              <div class="toggle-container">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="dnd-toggle" />
+                  <span class="slider"></span>
+                </label>
+                <span id="dnd-status" class="status-text">Disattivato</span>
+              </div>
+            </div>
+          </div>
     </div>
 
     <script src="renderer.js"></script>
