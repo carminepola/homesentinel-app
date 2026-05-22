@@ -150,10 +150,20 @@ create_release:
   script:
     - echo "Creating $RELEASE_NAME ($RELEASE_TAG)"
     - ls dist/
+    - |
+      cat > release_desc.md <<ENDOFDESC
+      ## HA-Cam ${BUILD_VERSION}
+
+      ### Commits
+
+      ${RELEASE_CHANGELOG}
+
+      Scarica il pacchetto per la tua piattaforma dalla sezione Assets qui sotto.
+      ENDOFDESC
   release:
     tag_name: $RELEASE_TAG
     name: $RELEASE_NAME
-    description: "## HA-Cam ${BUILD_VERSION}\n\n### Commits\n\n${RELEASE_CHANGELOG}\n\nScarica il pacchetto per la tua piattaforma dalla sezione Assets qui sotto."
+    description: release_desc.md
     assets:
       links:
         - name: "Windows Installer (.exe)"
