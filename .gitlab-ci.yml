@@ -82,6 +82,8 @@ create_release:
   needs: [build_linux, build_windows, set_version]
   variables:
     GIT_STRATEGY: none
+  before_script:
+    - echo "Skipping npm install for release job"
   script:
     - echo "Creating $RELEASE_NAME ($RELEASE_TAG)"
   release:
