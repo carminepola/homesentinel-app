@@ -155,16 +155,16 @@ create_release:
     assets:
       links:
         - name: "Windows Installer (.exe)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${WINDOWS_JOB_ID}/artifacts/raw/dist/${EXE_FILE}"
+          url: "${CI_PROJECT_URL}/-/jobs/${WINDOWS_JOB_ID}/artifacts/raw/dist/${EXE_FILE}"
           link_type: "package"
         - name: "Linux AppImage"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${APPIMAGE_JOB_ID}/artifacts/raw/dist/${APPIMAGE_FILE}"
+          url: "${CI_PROJECT_URL}/-/jobs/${APPIMAGE_JOB_ID}/artifacts/raw/dist/${APPIMAGE_FILE}"
           link_type: "package"
         - name: "Linux Debian/Ubuntu (.deb)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${DEB_JOB_ID}/artifacts/raw/dist/${DEB_FILE}"
+          url: "${CI_PROJECT_URL}/-/jobs/${DEB_JOB_ID}/artifacts/raw/dist/${DEB_FILE}"
           link_type: "package"
         - name: "Linux Fedora/openSUSE (.rpm)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/jobs/${RPM_JOB_ID}/artifacts/raw/dist/${RPM_FILE}"
+          url: "${CI_PROJECT_URL}/-/jobs/${RPM_JOB_ID}/artifacts/raw/dist/${RPM_FILE}"
           link_type: "package"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "dev"'
