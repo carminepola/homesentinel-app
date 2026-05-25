@@ -114,10 +114,14 @@ class PiPWindowManager {
            this.pipWindows.splice(index, 1);
          }
 
-         this.windowCameraMap.delete(pipWindow.id);
-         this.windowCameraIdMap.delete(pipWindow.id);
-         this.windowPositionMap.delete(pipWindow.id);
-         this.windowSettingsMap.delete(pipWindow.id);
+          this.windowCameraMap.delete(pipWindow.id);
+          this.windowCameraIdMap.delete(pipWindow.id);
+          this.windowPositionMap.delete(pipWindow.id);
+          this.windowSettingsMap.delete(pipWindow.id);
+
+          if (this.windowOriginalBoundsMap) {
+            this.windowOriginalBoundsMap.delete(pipWindow.id);
+          }
 
          // Riorganizza le finestre rimanenti
          this.reorganizeWindows();
@@ -613,38 +617,68 @@ class PiPWindowManager {
   }
 
    setupIpcHandlers() {
-     ipcMain.on("move-pip-window", (event, { deltaX, deltaY }) => {
+      ipcMain.on("move-pip-window", (event, { deltaX, deltaY }) => {
+        const pipWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!pipWindow || pipWindow.isDestroyed()) return;
+
+        const currentBounds = pipWindow.getBounds();
+        const newX = currentBounds.x + deltaX;
+        const newY = currentBounds.y + deltaY;
+
+        const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+        const boundedX = Math.max(0, Math.min(newX, screenWidth - currentBounds.width));
+        const boundedY = Math.max(0, Math.min(newY, screenHeight - currentBounds.height));
+
+        pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY));
+      });
+
+      ipcMain.on("set-window-position", (event, { x, y }) => {
+        const pipWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!pipWindow || pipWindow.isDestroyed()) return;
+
+        const currentBounds = pipWindow.getBounds();
+        const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+
+        const boundedX = Math.max(0, Math.min(x, screenWidth - currentBounds.width));
+        const boundedY = Math.max(0, Math.min(y, screenHeight - currentBounds.height));
+
+        setImmediate(() => {
+          if (!pipWindow.isDestroyed()) {
+            pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY), false);
+          }
+        });
+      });
+
+     ipcMain.on("maximize-pip-window", (event) => {
        const pipWindow = BrowserWindow.fromWebContents(event.sender);
        if (!pipWindow || pipWindow.isDestroyed()) return;
 
-       const currentBounds = pipWindow.getBounds();
-       const newX = currentBounds.x + deltaX;
-       const newY = currentBounds.y + deltaY;
-
        const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
-       const boundedX = Math.max(0, Math.min(newX, screenWidth - currentBounds.width));
-       const boundedY = Math.max(0, Math.min(newY, screenHeight - currentBounds.height));
+       const currentBounds = pipWindow.getBounds();
 
-       pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY));
+       this.windowOriginalBoundsMap = this.windowOriginalBoundsMap || new Map();
+       this.windowOriginalBoundsMap.set(pipWindow.id, { ...currentBounds });
+
+       pipWindow.setBounds({ x: 0, y: 0, width: screenWidth, height: screenHeight });
+
+       pipWindow.webContents.send("pip-maximized");
      });
 
-     ipcMain.on("set-window-position", (event, { x, y }) => {
+     ipcMain.on("restore-pip-window", (event) => {
        const pipWindow = BrowserWindow.fromWebContents(event.sender);
        if (!pipWindow || pipWindow.isDestroyed()) return;
 
-       const currentBounds = pipWindow.getBounds();
-       const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
+       this.windowOriginalBoundsMap = this.windowOriginalBoundsMap || new Map();
+       const originalBounds = this.windowOriginalBoundsMap.get(pipWindow.id);
 
-       const boundedX = Math.max(0, Math.min(x, screenWidth - currentBounds.width));
-       const boundedY = Math.max(0, Math.min(y, screenHeight - currentBounds.height));
+       if (originalBounds) {
+         pipWindow.setBounds(originalBounds);
+         this.windowOriginalBoundsMap.delete(pipWindow.id);
+       }
 
-       setImmediate(() => {
-         if (!pipWindow.isDestroyed()) {
-           pipWindow.setPosition(Math.round(boundedX), Math.round(boundedY), false);
-         }
-       });
+       pipWindow.webContents.send("pip-restored");
      });
-   }
+    }
 
   // Metodo per impostare lo stato di blocco del sistema
   setSystemLocked(locked) {

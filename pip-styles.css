@@ -305,6 +305,7 @@ body {
 .floating-close-btn,
 .audio-btn,
 .move-btn,
+.maximize-btn,
 .timer-lock-btn {
   width: 26px;
   height: 26px;
@@ -371,6 +372,25 @@ body {
 
 .timer-lock-btn.locked:hover {
   background: rgba(249, 115, 22, 1);
+}
+
+.maximize-btn:hover {
+  background: rgba(59, 130, 246, 0.8);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+.maximize-btn:active {
+  transform: scale(0.95);
+}
+
+.maximize-btn.maximized {
+  background: rgba(16, 185, 129, 0.6);
+}
+
+.maximize-btn.maximized:hover {
+  background: rgba(16, 185, 129, 0.9);
+  color: #fff;
 }
 
 .pip-timer {
@@ -467,6 +487,7 @@ body {
 .floating-close-btn:focus,
 .audio-btn:focus,
 .move-btn:focus,
+.maximize-btn:focus,
 .timer-lock-btn:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -481,6 +502,7 @@ body {
   .floating-close-btn,
   .audio-btn,
   .move-btn,
+  .maximize-btn,
   .timer-lock-btn {
     width: 22px;
     height: 22px;

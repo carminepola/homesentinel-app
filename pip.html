@@ -58,6 +58,21 @@
               </svg>
             </button>
 
+            <button id="maximize-btn" class="maximize-btn" title="Espandi a schermo intero">
+              <svg id="maximize-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              <svg id="restore-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none">
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+            </button>
+
             <button id="timer-lock-btn" class="timer-lock-btn" title="Blocca/Sblocca Timer">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2v4"></path>
@@ -113,8 +128,12 @@
       const timerBar = document.getElementById("timer-bar");
       const timerText = document.getElementById("timer-text");
       const timerLockBtn = document.getElementById("timer-lock-btn");
+      const maximizeBtn = document.getElementById("maximize-btn");
+      const maximizeIcon = document.getElementById("maximize-icon");
+      const restoreIcon = document.getElementById("restore-icon");
 
       let isMuted = true;
+      let isMaximized = false;
       let timerInterval;
       let remainingTime = 10;
       let totalTime = 10;
@@ -459,6 +478,7 @@
         floatingCloseBtn.addEventListener("click", closeWindow);
         audioBtn.addEventListener("click", toggleMute);
         timerLockBtn.addEventListener("click", toggleTimerLock);
+        maximizeBtn.addEventListener("click", toggleMaximize);
 
         moveBtn.addEventListener("mousedown", onMoveBtnDown);
         document.addEventListener("mousemove", onDragMove);
@@ -515,6 +535,30 @@
           timerLockBtn.title = "Blocca Timer";
         }
       }
+
+      function toggleMaximize() {
+        if (isMaximized) {
+          ipcRenderer.send("restore-pip-window");
+        } else {
+          ipcRenderer.send("maximize-pip-window");
+        }
+      }
+
+      ipcRenderer.on("pip-maximized", () => {
+        isMaximized = true;
+        maximizeIcon.style.display = "none";
+        restoreIcon.style.display = "block";
+        maximizeBtn.title = "Riduci a dimensione normale";
+        maximizeBtn.classList.add("maximized");
+      });
+
+      ipcRenderer.on("pip-restored", () => {
+        isMaximized = false;
+        maximizeIcon.style.display = "block";
+        restoreIcon.style.display = "none";
+        maximizeBtn.title = "Espandi a schermo intero";
+        maximizeBtn.classList.remove("maximized");
+      });
 
       function updateMuteButton() {
         if (isMuted) {
