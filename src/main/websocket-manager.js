@@ -196,12 +196,38 @@ class WebSocketManager {
       this.onConnectionStatusChange(false);
     }
 
-    if (!this.isReconnecting) {
-      this.reconnectTimeout = setTimeout(() => {
-        this.isReconnecting = false;
-        this.connectToHomeAssistant();
-      }, appConfig.websocket.reconnectDelay);
+    this.scheduleReconnect();
+  }
+
+  scheduleReconnect() {
+    this.clearReconnectTimeout();
+    this.isReconnecting = false;
+
+    this.reconnectTimeout = setTimeout(() => {
+      this.isReconnecting = false;
+      this.connectToHomeAssistant();
+    }, appConfig.websocket.reconnectDelay);
+  }
+
+  forceReconnect() {
+    this.clearReconnectTimeout();
+    this.stopHeartbeat();
+    this.isReconnecting = false;
+
+    if (this.wsConnection) {
+      try {
+        this.wsConnection.removeAllListeners();
+        if (this.wsConnection.readyState === WebSocket.OPEN || this.wsConnection.readyState === WebSocket.CONNECTING) {
+          this.wsConnection.close(1000, "Force reconnect");
+        }
+      } catch (error) {
+        console.error("Errore durante force reconnect:", error);
+      }
+      this.wsConnection = null;
     }
+
+    this.subscriptionIds.clear();
+    this.connectToHomeAssistant();
   }
 
   startHeartbeat() {

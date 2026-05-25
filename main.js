@@ -243,6 +243,7 @@ if (!gotTheLock) {
         isSystemLocked = false;
         pipWindowManager.setSystemLocked(false);
         console.log("Sistema sbloccato - ripresa creazione finestre PiP");
+        reconnectAfterWake();
       });
 
       powerMonitor.on("suspend", () => {
@@ -255,7 +256,16 @@ if (!gotTheLock) {
         isSystemLocked = false;
         pipWindowManager.setSystemLocked(false);
         console.log("Sistema ripreso - ripresa creazione finestre PiP");
+        reconnectAfterWake();
       });
+
+      function reconnectAfterWake() {
+        setTimeout(() => {
+          console.log("Riconnessione post-ripristino...");
+          websocketManager.forceReconnect();
+          streamPreWarmer.restart();
+        }, 2000);
+      }
 
       // Sincronizza l'impostazione di auto-start
       autoStartManager.syncAutoStart();
