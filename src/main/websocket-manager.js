@@ -143,12 +143,6 @@ class WebSocketManager {
     }
 
     const settings = this.settingsManager.getSettings();
-    const mapping = settings.sensorCameraMappings.find((m) => m.sensorId === entity_id);
-    
-    if (!mapping) {
-      return;
-    }
-
     const sensorState = new_state?.state || "unknown";
     const previousState = old_state?.state || "unknown";
     this.sensorStates.set(entity_id, sensorState);
@@ -177,6 +171,11 @@ class WebSocketManager {
           });
         }
       }
+    }
+
+    const mapping = settings.sensorCameraMappings?.find((m) => m.sensorId === entity_id);
+    if (!mapping) {
+      return;
     }
 
     if (this.onSensorEvent) {
