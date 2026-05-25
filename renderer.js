@@ -1,4 +1,5 @@
 const { ipcRenderer } = require("electron");
+const { marked } = require("marked");
 
 // Importa i moduli
 const ThemeManager = require("./src/renderer/theme-manager");
@@ -763,7 +764,7 @@ async function checkForUpdates() {
 
     if (result.hasUpdate) {
       const changelogHtml = result.releaseDescription
-        ? `<div class="changelog" style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.8125rem; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">${result.releaseDescription.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`
+        ? `<div class="changelog" style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.8125rem; max-height: 200px; overflow-y: auto;">${marked.parse(result.releaseDescription)}</div>`
         : "";
       content.innerHTML = `
         <div class="update-available">
