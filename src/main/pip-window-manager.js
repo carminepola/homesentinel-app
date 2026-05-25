@@ -12,6 +12,7 @@ class PiPWindowManager {
     this.windowSettingsMap = new Map();
     this.pendingCameraIds = new Set();
     this.websocketManager = null;
+    this.streamPreWarmer = null;
     this.isSystemLocked = false;
 
     this.setupIpcHandlers();
@@ -19,6 +20,10 @@ class PiPWindowManager {
 
   setWebSocketManager(websocketManager) {
     this.websocketManager = websocketManager;
+  }
+
+  setStreamPreWarmer(streamPreWarmer) {
+    this.streamPreWarmer = streamPreWarmer;
   }
 
    createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null) {
@@ -68,7 +73,6 @@ class PiPWindowManager {
           y,
           icon: pipIcon,
           ...windowOptions,
-          focusable: true,
           webPreferences,
         });
 
@@ -425,6 +429,12 @@ class PiPWindowManager {
     let resolvedStreamType = null;
 
     if (mapping.cameraId) {
+      const existingWindow = this.findWindowByCameraId(mapping.cameraId);
+      if (existingWindow && !existingWindow.isDestroyed()) {
+        this.restartWindowTimer(existingWindow, duration);
+        return;
+      }
+
       const isCustom = mapping.cameraId.startsWith("custom_");
 
       if (isCustom) {
@@ -441,30 +451,33 @@ class PiPWindowManager {
           }
         }
       } else {
-        if (!this.websocketManager) {
-          return;
+        const cached = this.streamPreWarmer ? this.streamPreWarmer.getCachedUrl(mapping.cameraId) : null;
+
+        if (cached) {
+          console.log(`PiPWindowManager: URL per ${mapping.cameraId} dalla cache preWarmer`);
+          finalCameraUrl = cached.url;
+          cameraName = cached.friendlyName;
+          resolvedStreamType = cached.streamType;
+        } else {
+          if (!this.websocketManager) {
+            return;
+          }
+
+          const mappingStreamType = mapping.streamType || "auto";
+          const globalUseHLS = settings.streamingSettings?.useHLS || false;
+          const useHLS = mappingStreamType === "hls" ? true :
+                          mappingStreamType === "mjpeg" ? false : globalUseHLS;
+
+          const cameraResult = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
+
+          if (!cameraResult) {
+            return;
+          }
+
+          finalCameraUrl = cameraResult.url;
+          cameraName = cameraResult.friendlyName;
+          resolvedStreamType = cameraResult.streamType || "mjpeg";
         }
-
-        const mappingStreamType = mapping.streamType || "auto";
-        const globalUseHLS = settings.streamingSettings?.useHLS || false;
-        const useHLS = mappingStreamType === "hls" ? true :
-                        mappingStreamType === "mjpeg" ? false : globalUseHLS;
-
-        const cameraResult = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
-
-        if (!cameraResult) {
-          return;
-        }
-
-        finalCameraUrl = cameraResult.url;
-        cameraName = cameraResult.friendlyName;
-        resolvedStreamType = cameraResult.streamType || "mjpeg";
-      }
-
-      const existingWindow = this.findWindowByCameraId(mapping.cameraId);
-      if (existingWindow && !existingWindow.isDestroyed()) {
-        this.restartWindowTimer(existingWindow, duration);
-        return;
       }
     }
 

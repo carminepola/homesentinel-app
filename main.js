@@ -16,6 +16,7 @@ const PiPWindowManager = require("./src/main/pip-window-manager");
 const AlarmWindowManager = require("./src/main/alarm-window-manager");
 const TrayManager = require("./src/main/tray-manager");
 const AutoStartManager = require("./src/main/auto-start-manager");
+const StreamPreWarmer = require("./src/main/stream-prewarmer");
 const IPCHandlers = require("./src/main/ipc-handlers");
 const appConfig = require("./src/shared/app-config");
 
@@ -28,6 +29,7 @@ let pipWindowManager;
 let alarmWindowManager;
 let trayManager;
 let autoStartManager;
+let streamPreWarmer;
 let ipcHandlers;
 let isWebSocketConnected = false;
 let isSystemLocked = false;
@@ -130,6 +132,8 @@ function initializeManagers() {
   alarmWindowManager.setWebSocketManager(websocketManager);
   trayManager = new TrayManager(settingsManager);
   autoStartManager = new AutoStartManager(settingsManager);
+  streamPreWarmer = new StreamPreWarmer(settingsManager, websocketManager);
+  pipWindowManager.setStreamPreWarmer(streamPreWarmer);
   // ipcHandlers verrà inizializzato dopo la creazione della finestra
 }
 
@@ -218,12 +222,14 @@ if (!gotTheLock) {
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
-      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, () => {
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, () => {
         isQuitting = true;
         app.quit();
       });
 
       setupEventCallbacks();
+
+      streamPreWarmer.start();
 
       // Configura i gestori per gli eventi di blocco/sblocco del sistema
       powerMonitor.on("lock-screen", () => {
@@ -280,6 +286,9 @@ if (!gotTheLock) {
       }
       if (alarmWindowManager) {
         alarmWindowManager.closeAlarmWindow();
+      }
+      if (streamPreWarmer) {
+        streamPreWarmer.stop();
       }
       if (websocketManager) {
         websocketManager.closeConnection();

@@ -2,7 +2,7 @@ const { ipcMain, dialog, app, shell } = require("electron");
 const appConfig = require("../shared/app-config");
 
 class IPCHandlers {
-  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, onQuitCallback) {
+  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, onQuitCallback) {
     this.mainWindow = mainWindow;
     this.settingsManager = settingsManager;
     this.websocketManager = websocketManager;
@@ -10,6 +10,7 @@ class IPCHandlers {
     this.alarmWindowManager = alarmWindowManager;
     this.autoStartManager = autoStartManager;
     this.trayManager = trayManager;
+    this.streamPreWarmer = streamPreWarmer;
     this.onQuitCallback = onQuitCallback;
 
     this.setupIpcHandlers();
@@ -123,18 +124,25 @@ class IPCHandlers {
     const haSettingsChanged = oldSettings.homeAssistantUrl !== settings.homeAssistantUrl ||
                            oldSettings.homeAssistantToken !== settings.homeAssistantToken;
 
+    const mappingsChanged = JSON.stringify(oldSettings.sensorCameraMappings) !==
+                          JSON.stringify(settings.sensorCameraMappings);
+
+    const alarmChanged = JSON.stringify(oldSettings.alarmSettings) !==
+                       JSON.stringify(settings.alarmSettings);
+
     if (haSettingsChanged) {
       this.websocketManager.closeConnection();
       this.websocketManager.connectToHomeAssistant();
-    } else {
-      const mappingsChanged = JSON.stringify(oldSettings.sensorCameraMappings) !==
-                            JSON.stringify(settings.sensorCameraMappings);
+    } else if (mappingsChanged || alarmChanged) {
+      this.websocketManager.updateSubscriptions();
+    }
 
-      const alarmChanged = JSON.stringify(oldSettings.alarmSettings) !==
-                         JSON.stringify(settings.alarmSettings);
+    const preWarmerChanged = JSON.stringify(oldSettings.preWarmerSettings) !==
+                           JSON.stringify(settings.preWarmerSettings);
 
-      if (mappingsChanged || alarmChanged) {
-        this.websocketManager.updateSubscriptions();
+    if (preWarmerChanged || mappingsChanged || haSettingsChanged) {
+      if (this.streamPreWarmer) {
+        this.streamPreWarmer.restart();
       }
     }
 

@@ -219,6 +219,22 @@
             </div>
 
             <div class="card">
+              <h2>Pre-riscaldamento Stream</h2>
+              <div class="toggle-container" style="margin-bottom: 1rem">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="prewarmer-enabled" />
+                  <span class="slider"></span>
+                </label>
+                <span class="status-text">Mantieni gli stream delle cam sempre pronti</span>
+              </div>
+              <div class="form-group">
+                <label for="prewarmer-interval">Intervallo di aggiornamento (secondi)</label>
+                <input type="number" id="prewarmer-interval" min="10" max="300" value="30" />
+                <p class="help-text">Ogni quanto il servizio aggiorna la cache e tiene sveglie le cam. Valori bassi = risposta piu veloce ma piu traffico di rete. Minimo 10s, massimo 300s.</p>
+              </div>
+            </div>
+
+            <div class="card">
               <h2>Avvio Automatico</h2>
               <div class="toggle-container">
                 <label class="toggle-switch">

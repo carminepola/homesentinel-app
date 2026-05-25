@@ -323,6 +323,13 @@ function updateUIFromSettings() {
   const useHls = document.getElementById("use-hls");
   if (useHls) useHls.checked = appSettings.streamingSettings?.useHLS || false;
 
+  // PreWarmer settings
+  const prewarmerEnabled = document.getElementById("prewarmer-enabled");
+  if (prewarmerEnabled) prewarmerEnabled.checked = appSettings.preWarmerSettings?.enabled ?? true;
+
+  const prewarmerInterval = document.getElementById("prewarmer-interval");
+  if (prewarmerInterval) prewarmerInterval.value = appSettings.preWarmerSettings?.intervalSeconds || 30;
+
   // Alarm settings
   const alarmEnabled = document.getElementById("alarm-enabled");
   if (alarmEnabled) alarmEnabled.checked = appSettings.alarmSettings?.enabled || false;
@@ -386,6 +393,10 @@ async function saveSettings() {
     },
     streamingSettings: {
       useHLS: document.getElementById("use-hls")?.checked || false,
+    },
+    preWarmerSettings: {
+      enabled: document.getElementById("prewarmer-enabled")?.checked ?? true,
+      intervalSeconds: parseInt(document.getElementById("prewarmer-interval")?.value || 30),
     },
     alarmSettings: {
       enabled: document.getElementById("alarm-enabled")?.checked || false,

@@ -18,6 +18,10 @@ const defaultSettings = {
   streamingSettings: {
     useHLS: false,
   },
+  preWarmerSettings: {
+    enabled: true,
+    intervalSeconds: 30,
+  },
   alarmSettings: {
     enabled: false,
     sensorId: "",
