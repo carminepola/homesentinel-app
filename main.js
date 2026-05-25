@@ -47,6 +47,7 @@ function createMainWindow() {
       nodeIntegration: true,
       contextIsolation: false,
     },
+    autoHideMenuBar: true,
     show: false,
     skipTaskbar: isAutoStart,
   });
