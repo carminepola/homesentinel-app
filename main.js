@@ -234,37 +234,55 @@ if (!gotTheLock) {
 
       // Configura i gestori per gli eventi di blocco/sblocco del sistema
       powerMonitor.on("lock-screen", () => {
+        const ts = new Date().toISOString();
         isSystemLocked = true;
         pipWindowManager.setSystemLocked(true);
-        console.log("Sistema bloccato - sospensione creazione finestre PiP");
+        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
+        console.log(`[${ts}] [DEBUG] lock-screen: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
       });
 
       powerMonitor.on("unlock-screen", () => {
+        const ts = new Date().toISOString();
         isSystemLocked = false;
         pipWindowManager.setSystemLocked(false);
-        console.log("Sistema sbloccato - ripresa creazione finestre PiP");
+        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
+        console.log(`[${ts}] [DEBUG] unlock-screen: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
         reconnectAfterWake();
       });
 
       powerMonitor.on("suspend", () => {
+        const ts = new Date().toISOString();
         isSystemLocked = true;
         pipWindowManager.setSystemLocked(true);
-        console.log("Sistema in sospensione - sospensione creazione finestre PiP");
+        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
+        console.log(`[${ts}] [DEBUG] suspend: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
       });
 
       powerMonitor.on("resume", () => {
+        const ts = new Date().toISOString();
         isSystemLocked = false;
         pipWindowManager.setSystemLocked(false);
-        console.log("Sistema ripreso - ripresa creazione finestre PiP");
+        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
+        console.log(`[${ts}] [DEBUG] resume: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
         reconnectAfterWake();
       });
 
       function reconnectAfterWake() {
+        const ts = new Date().toISOString();
+        console.log(`[${ts}] [DEBUG] reconnectAfterWake: scheduling forceReconnect + prewarmer restart (2s) and PiP refresh (5s)`);
+
         setTimeout(() => {
-          console.log("Riconnessione post-ripristino...");
+          const ts2 = new Date().toISOString();
+          console.log(`[${ts2}] [DEBUG] reconnectAfterWake: executing forceReconnect + prewarmer restart`);
           websocketManager.forceReconnect();
           streamPreWarmer.restart();
         }, 2000);
+
+        setTimeout(async () => {
+          const ts3 = new Date().toISOString();
+          console.log(`[${ts3}] [DEBUG] reconnectAfterWake: refreshing active PiP windows`);
+          await pipWindowManager.refreshActivePiPWindows();
+        }, 5000);
       }
 
       // Sincronizza l'impostazione di auto-start

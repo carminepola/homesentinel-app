@@ -686,6 +686,42 @@ class PiPWindowManager {
     console.log(`PiPWindowManager: Sistema ${locked ? "bloccato" : "sbloccato"}`);
   }
 
+  async refreshActivePiPWindows() {
+    if (!this.websocketManager) return;
+
+    const settings = this.settingsManager.getSettings();
+    const windows = this.pipWindows.filter((w) => !w.isDestroyed());
+
+    for (const window of windows) {
+      const cameraId = this.windowCameraIdMap.get(window.id);
+      if (!cameraId || cameraId.startsWith("custom_")) continue;
+
+      try {
+        const useHLS = settings.streamingSettings?.useHLS || false;
+        const result = await this.websocketManager.getCameraUrlWithToken(
+          cameraId,
+          settings.homeAssistantUrl,
+          settings.homeAssistantToken,
+          useHLS
+        );
+
+        if (result && !window.isDestroyed()) {
+          const newUrl = result.url.replace("camera_proxy/", "camera_proxy_stream/");
+          this.windowCameraMap.set(window.id, newUrl);
+
+          window.webContents.send("refresh-stream", {
+            url: newUrl,
+            streamType: result.streamType || "mjpeg",
+          });
+
+          console.log(`PiPWindowManager: refresh URL per ${cameraId}`);
+        }
+      } catch (err) {
+        console.warn(`PiPWindowManager: refresh fallito per ${cameraId}: ${err.message}`);
+      }
+    }
+  }
+
   // Metodo per verificare se il sistema è bloccato
   getSystemLocked() {
     return this.isSystemLocked;

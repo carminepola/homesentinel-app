@@ -140,10 +140,30 @@
       let fallbackTimeout;
       let isTimerPaused = false;
       let isTimerLocked = false;
+      let mjpegRetryCount = 0;
+      let mjpegRetryTimeout = null;
+      const MJPEG_MAX_RETRIES = 10;
+      const MJPEG_RETRY_BASE_DELAY = 3000;
 
       let isDragging = false;
       let lastScreenX = 0;
       let lastScreenY = 0;
+
+      ipcRenderer.on("refresh-stream", (event, config) => {
+        if (config && config.url) {
+          window.cameraUrl = config.url;
+          const st = config.streamType || streamBadge.dataset.type || "mjpeg";
+          if (st === "mjpeg") {
+            loadMjpegStream(config.url);
+          } else if (st === "hls") {
+            if (window.hlsInstance) {
+              window.hlsInstance.destroy();
+              window.hlsInstance = null;
+            }
+            loadHlsStream(config.url);
+          }
+        }
+      });
 
       document.addEventListener("DOMContentLoaded", () => {
         setupEventListeners();
@@ -356,6 +376,11 @@
       function loadMjpegStream(url) {
         console.log(`Caricamento stream MJPEG da: ${url}`);
 
+        if (mjpegRetryTimeout) {
+          clearTimeout(mjpegRetryTimeout);
+          mjpegRetryTimeout = null;
+        }
+
         try {
           pipVideo.style.display = "none";
           mjpegStream.style.display = "block";
@@ -374,6 +399,7 @@
 
           mjpegStream.onload = () => {
             clearTimeout(loadTimeout);
+            mjpegRetryCount = 0;
             console.log("Stream MJPEG caricato con successo");
             pipLoading.style.display = "none";
             startTimer();
@@ -381,12 +407,25 @@
 
           mjpegStream.onerror = () => {
             clearTimeout(loadTimeout);
-            console.error("Errore nel caricamento dello stream MJPEG");
-            pipLoading.innerHTML = getErrorHtml(
-              "Errore caricamento MJPEG",
-              "Verifica URL e connessione",
-              url
-            );
+            mjpegRetryCount++;
+            if (mjpegRetryCount <= MJPEG_MAX_RETRIES) {
+              const delay = MJPEG_RETRY_BASE_DELAY * Math.min(mjpegRetryCount, 5);
+              console.warn(`MJPEG errore, retry ${mjpegRetryCount}/${MJPEG_MAX_RETRIES} tra ${delay}ms`);
+              pipLoading.innerHTML = `<div class="pip-loading"><div class="pip-loading-spinner"></div><div class="pip-loading-text">Riconnessione (${mjpegRetryCount})...</div></div>`;
+              pipLoading.style.display = "flex";
+
+              mjpegRetryTimeout = setTimeout(() => {
+                const ts = Date.now();
+                mjpegStream.src = `${url}${url.includes("?") ? "&" : "?"}_t=${ts}`;
+              }, delay);
+            } else {
+              console.error("MJPEG: tentativi esauriti");
+              pipLoading.innerHTML = getErrorHtml(
+                "Stream non disponibile",
+                "Impossibile riconnettersi allo stream",
+                url
+              );
+            }
           };
         } catch (error) {
           console.error("Errore nell'inizializzazione dello stream MJPEG:", error);

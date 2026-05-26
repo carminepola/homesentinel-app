@@ -47,6 +47,8 @@ class WebSocketManager {
       this.wsConnection = new WebSocket(wsUrl);
 
       this.wsConnection.on("open", () => {
+        const ts = new Date().toISOString();
+        console.log(`[${ts}] [DEBUG] WS open: connessione stabilita, invio auth`);
         this.isReconnecting = false;
         this.clearReconnectTimeout();
         this.wsConnection.send(JSON.stringify({
@@ -60,11 +62,14 @@ class WebSocketManager {
       });
 
       this.wsConnection.on("close", (code) => {
+        const ts = new Date().toISOString();
+        console.log(`[${ts}] [DEBUG] WS close: code=${code}, isReconnecting=${this.isReconnecting}`);
         this.handleConnectionClose(code);
       });
 
       this.wsConnection.on("error", (error) => {
-        console.error("Errore WebSocket:", error);
+        const ts = new Date().toISOString();
+        console.error(`[${ts}] [DEBUG] WS error: ${error.message}, isReconnecting=${this.isReconnecting}`);
         this.isReconnecting = false;
       });
     } catch (error) {
