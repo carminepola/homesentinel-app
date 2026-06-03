@@ -110,6 +110,9 @@ function setupIpcListeners() {
 }
 
 function addCameraFeed(data) {
+  const existingFeed = document.getElementById(`camera-feed-${data.cameraId}`);
+  if (existingFeed) return;
+
   const container = document.getElementById("alarm-cameras");
 
   const card = document.createElement("div");

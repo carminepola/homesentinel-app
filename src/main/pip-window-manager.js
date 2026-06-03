@@ -26,7 +26,7 @@ class PiPWindowManager {
     this.streamPreWarmer = streamPreWarmer;
   }
 
-   createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null) {
+   createPiPWindow(cameraUrl, cameraSettings, duration, cameraName = null, streamType = null, cameraId = null) {
      if (!cameraUrl) {
        console.error("cameraUrl non fornito");
        return null;
@@ -94,13 +94,14 @@ class PiPWindowManager {
            }
          }
 
-         pipWindow.webContents.send("load-camera", {
-           url: cameraUrl,
-           duration: duration || 10,
-           useHLS: resolvedStreamType === "hls",
-           streamType: resolvedStreamType,
-           cameraName: cameraName,
-         });
+          pipWindow.webContents.send("load-camera", {
+            url: cameraUrl,
+            duration: duration || 10,
+            useHLS: resolvedStreamType === "hls",
+            streamType: resolvedStreamType,
+            cameraName: cameraName,
+            cameraId: cameraId,
+          });
 
          // Invia il messaggio per l'animazione di apertura
          setTimeout(() => {
@@ -426,6 +427,13 @@ class PiPWindowManager {
         this.restartWindowTimer(existingWindow, duration);
         return;
       }
+
+      if (this.pendingCameraIds.has(mapping.cameraId)) {
+        console.log(`PiPWindowManager: finestra per ${mapping.cameraId} già in creazione, ignoro`);
+        return;
+      }
+
+      this.pendingCameraIds.add(mapping.cameraId);
     }
 
     let finalCameraUrl = null;
@@ -433,12 +441,6 @@ class PiPWindowManager {
     let resolvedStreamType = null;
 
     if (mapping.cameraId) {
-      const existingWindow = this.findWindowByCameraId(mapping.cameraId);
-      if (existingWindow && !existingWindow.isDestroyed()) {
-        this.restartWindowTimer(existingWindow, duration);
-        return;
-      }
-
       const isCustom = mapping.cameraId.startsWith("custom_");
 
       if (isCustom) {
@@ -464,6 +466,7 @@ class PiPWindowManager {
           resolvedStreamType = cached.streamType;
         } else {
           if (!this.websocketManager) {
+            this.pendingCameraIds.delete(mapping.cameraId);
             return;
           }
 
@@ -475,6 +478,7 @@ class PiPWindowManager {
           const cameraResult = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
 
           if (!cameraResult) {
+            this.pendingCameraIds.delete(mapping.cameraId);
             return;
           }
 
@@ -486,6 +490,7 @@ class PiPWindowManager {
     }
 
     if (!finalCameraUrl) {
+      if (mapping.cameraId) this.pendingCameraIds.delete(mapping.cameraId);
       return;
     }
 
@@ -494,9 +499,10 @@ class PiPWindowManager {
       cameraSettings.position = settings.pipSettings.position || "top-right";
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType);
-    if (result && mapping.cameraId) {
-      this.windowCameraIdMap.set(result.id, mapping.cameraId);
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType, mapping.cameraId);
+
+    if (mapping.cameraId) {
+      this.pendingCameraIds.delete(mapping.cameraId);
     }
   }
 
@@ -598,11 +604,7 @@ class PiPWindowManager {
       resolvedStreamType = "mjpeg";
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType);
-
-    if (result && cameraId) {
-      this.windowCameraIdMap.set(result.id, cameraId);
-    }
+    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType, cameraId);
   }
 
   getActivePiPWindowsCount() {

@@ -69,6 +69,10 @@ class IPCHandlers {
       return this.handleSetDndMode(enabled);
     });
 
+    ipcMain.handle("request-stream-url", async (event, { cameraId, preference }) => {
+      return this.handleRequestStreamUrl(cameraId, preference);
+    });
+
     ipcMain.handle("get-dnd-status", () => {
       return this.handleGetDndStatus();
     });
@@ -406,6 +410,35 @@ class IPCHandlers {
       if ((pa[i] || 0) < (pb[i] || 0)) return -1;
     }
     return 0;
+  }
+
+  async handleRequestStreamUrl(cameraId, preference) {
+    if (!this.websocketManager || !cameraId) return null;
+
+    const settings = this.settingsManager.getSettings();
+    const { homeAssistantUrl, homeAssistantToken } = settings;
+
+    if (!homeAssistantUrl || !homeAssistantToken) return null;
+
+    try {
+      const useHLS = preference === "hls";
+      const result = await this.websocketManager.getCameraUrlWithToken(
+        cameraId,
+        homeAssistantUrl,
+        homeAssistantToken,
+        useHLS
+      );
+
+      if (result && result.url) {
+        const url = result.url.replace("camera_proxy/", "camera_proxy_stream/");
+        return { url, streamType: result.streamType || "mjpeg", friendlyName: result.friendlyName };
+      }
+
+      return null;
+    } catch (err) {
+      console.error("IPCHandlers: errore richiesta stream URL:", err);
+      return null;
+    }
   }
 }
 

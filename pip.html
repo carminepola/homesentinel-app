@@ -142,6 +142,7 @@
       let isTimerLocked = false;
       let mjpegRetryCount = 0;
       let mjpegRetryTimeout = null;
+      let hlsRetrying = false;
       const MJPEG_MAX_RETRIES = 10;
       const MJPEG_RETRY_BASE_DELAY = 3000;
 
@@ -203,9 +204,74 @@
         `;
       }
 
+      async function requestFallbackUrl(preference) {
+        if (!window.cameraId) {
+          console.error("cameraId non disponibile, impossibile richiedere URL");
+          return null;
+        }
+        try {
+          const result = await ipcRenderer.invoke("request-stream-url", {
+            cameraId: window.cameraId,
+            preference: preference
+          });
+          return result;
+        } catch (err) {
+          console.error("Errore nella richiesta URL di fallback:", err);
+          return null;
+        }
+      }
+
+      async function handleHlsFailure() {
+        if (hlsRetrying) return;
+        hlsRetrying = true;
+
+        console.log("HLS fallito, richiedo URL HLS da Home Assistant...");
+        pipLoading.innerHTML = `<div class="pip-loading"><div class="pip-loading-spinner"></div><div class="pip-loading-text">Richiesta URL HLS...</div></div>`;
+        pipLoading.style.display = "flex";
+
+        const hlsResult = await requestFallbackUrl("hls");
+
+        if (hlsResult && hlsResult.streamType === "hls") {
+          console.log("Nuovo URL HLS ottenuto, riprovo:", hlsResult.url);
+          streamBadge.textContent = "HLS...";
+          streamBadge.dataset.type = "hls";
+          window.cameraUrl = hlsResult.url;
+          loadHlsStream(hlsResult.url);
+          hlsRetrying = false;
+          return;
+        }
+
+        console.log("HLS non disponibile, richiedo URL MJPEG...");
+        pipLoading.innerHTML = `<div class="pip-loading"><div class="pip-loading-spinner"></div><div class="pip-loading-text">Richiesta URL MJPEG...</div></div>`;
+        pipLoading.style.display = "flex";
+
+        const mjpegResult = await requestFallbackUrl("mjpeg");
+
+        if (mjpegResult && mjpegResult.url) {
+          console.log("URL MJPEG ottenuto:", mjpegResult.url);
+          streamBadge.textContent = "MJPEG";
+          streamBadge.dataset.type = "mjpeg";
+          window.cameraUrl = mjpegResult.url;
+          loadMjpegStream(mjpegResult.url);
+          hlsRetrying = false;
+          return;
+        }
+
+        console.error("Impossibile ottenere URL HLS o MJPEG");
+        pipLoading.innerHTML = getErrorHtml(
+          "Stream non disponibile",
+          "Impossibile ottenere un URL valido"
+        );
+        hlsRetrying = false;
+      }
+
       function loadCamera(config) {
         console.log("Caricamento camera con config:", config);
-        const { url, duration, useHLS, streamType, cameraName } = config;
+        const { url, duration, useHLS, streamType, cameraName, cameraId } = config;
+
+        if (cameraId) {
+          window.cameraId = cameraId;
+        }
 
         if (!url) {
           console.error("URL video non fornito");
@@ -311,30 +377,20 @@
               if (data.fatal) {
                 switch (data.type) {
                   case Hls.ErrorTypes.NETWORK_ERROR:
-                    console.error("Errore di rete HLS, tentativo fallback MJPEG:", data);
+                    console.error("Errore di rete HLS:", data);
                     hls.destroy();
                     window.hlsInstance = null;
-                    mjpegStream.style.display = "none";
-                    mjpegStream.src = "";
-                    pipVideo.style.display = "block";
-                    streamBadge.textContent = "MJPEG";
-                    streamBadge.dataset.type = "mjpeg";
-                    loadMjpegStream(url);
+                    handleHlsFailure();
                     return;
                   case Hls.ErrorTypes.MEDIA_ERROR:
                     console.error("Errore media HLS:", data);
                     hls.recoverMediaError();
                     break;
                   default:
-                    console.error("Errore fatale HLS, fallback MJPEG:", data);
+                    console.error("Errore fatale HLS:", data);
                     hls.destroy();
                     window.hlsInstance = null;
-                    mjpegStream.style.display = "none";
-                    mjpegStream.src = "";
-                    pipVideo.style.display = "block";
-                    streamBadge.textContent = "MJPEG";
-                    streamBadge.dataset.type = "mjpeg";
-                    loadMjpegStream(url);
+                    handleHlsFailure();
                     return;
                 }
               }
@@ -355,10 +411,8 @@
             });
 
             pipVideo.addEventListener("error", function () {
-              console.error("Errore nel caricamento del video HLS, fallback MJPEG");
-              streamBadge.textContent = "MJPEG";
-              streamBadge.dataset.type = "mjpeg";
-              loadMjpegStream(url);
+              console.error("Errore nel caricamento del video HLS");
+              handleHlsFailure();
             });
           } else {
             console.error("HLS non supportato in questo browser");
@@ -495,7 +549,7 @@
               }
             }
 
-            pipLoading.innerHTML = getErrorHtml(errorMessage, "Verifica URL e connessione", url);
+            showUrlPrompt(url);
           };
 
           pipVideo.addEventListener("loadeddata", handleLoadedData, { once: true });
