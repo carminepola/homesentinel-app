@@ -128,9 +128,13 @@ class PiPWindowManager {
          this.reorganizeWindows();
        });
 
-       this.pipWindows.push(pipWindow);
-       this.windowPositionMap.set(pipWindow.id, cameraSettings.position);
-       this.windowSettingsMap.set(pipWindow.id, cameraSettings);
+        this.pipWindows.push(pipWindow);
+        this.windowPositionMap.set(pipWindow.id, cameraSettings.position);
+        this.windowSettingsMap.set(pipWindow.id, cameraSettings);
+
+        if (cameraId) {
+          this.windowCameraIdMap.set(pipWindow.id, cameraId);
+        }
 
        return pipWindow;
      } catch (error) {
