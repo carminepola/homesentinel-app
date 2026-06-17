@@ -26,12 +26,6 @@ class TrayManager {
 
   createTray() {
     try {
-      if (process.platform === "linux" && this._isGnomeWithoutTray()) {
-        console.log("ℹ️ GNOME rilevato senza supporto tray icon");
-        this.isAvailable = false;
-        return false;
-      }
-
       const trayIcon = this._loadTrayIcon();
       if (!trayIcon) throw new Error("Nessuna icona valida trovata");
 
@@ -39,7 +33,6 @@ class TrayManager {
       this.tray.setToolTip(appConfig.app.name);
       this._updateContextMenu();
 
-      // Click sinistro → mostra finestra
       this.tray.on("click", () => {
         if (process.platform === "win32") {
           this.tray.popUpContextMenu();
@@ -50,7 +43,6 @@ class TrayManager {
         }
       });
 
-      // Click destro → apre menu contestuale (cross-platform)
       this.tray.on("right-click", () => {
         this.tray.popUpContextMenu();
       });
@@ -72,29 +64,12 @@ class TrayManager {
     }
   }
 
-  _isGnomeWithoutTray() {
-    const xdgDesktop = process.env.XDG_CURRENT_DESKTOP || "";
-    const gnomeVariants = ["GNOME", "GNOME-Classic", "ubuntu:GNOME"];
-    if (!gnomeVariants.some(d => xdgDesktop.includes(d))) return false;
-
-    try {
-      const { execSync } = require("child_process");
-      execSync("dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames 2>/dev/null | grep -q 'org.kde.StatusNotifierWatcher'", {
-        timeout: 2000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      return false;
-    } catch {
-      return true;
-    }
-  }
-
   _loadTrayIcon() {
     const possibiliPercorsi = [
-      path.join(__dirname, "..", "..", "assets/try-icon.svg"), // Prima prova SVG
-      path.join(__dirname, "..", "..", "assets/try-icon.png"), // Fallback a PNG
-      path.join(process.resourcesPath, "icon.svg"), // SVG nelle risorse
-      path.join(process.resourcesPath, "icon.png"), // PNG nelle risorse
+      path.join(__dirname, "..", "..", "assets/try-icon.png"),
+      path.join(__dirname, "..", "..", "assets/try-icon.svg"),
+      path.join(process.resourcesPath, "icon.png"),
+      path.join(process.resourcesPath, "icon.svg"),
     ];
 
     for (const percorso of possibiliPercorsi) {
@@ -102,13 +77,9 @@ class TrayManager {
         try {
           let icona = nativeImage.createFromPath(percorso);
           if (!icona.isEmpty()) {
-            // Per SVG, non ridimensionare forzatamente su Linux per mantenere la qualità
             if (process.platform === "linux") {
-              icona.setTemplateImage(true); // Importante per GNOME
-              // Su Linux con SVG, è meglio non ridimensionare forzatamente
-              // Il sistema gestirà automaticamente le dimensioni appropriate
+              icona.setTemplateImage(true);
             } else {
-              // Per Windows e macOS, ridimensiona se necessario
               icona = icona.resize({ width: 512, height: 512, quality: "best" });
               icona.setTemplateImage(false);
             }
