@@ -32,8 +32,8 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "it.devmin.homesentinel",
-    "productName": "homesentinel",
+    "appId": "it.devmin.homeSentinel",
+    "productName": "Homesentinel",
     "directories": {
       "output": "dist"
     },
