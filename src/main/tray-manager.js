@@ -75,7 +75,18 @@ class TrayManager {
   _isGnomeWithoutTray() {
     const xdgDesktop = process.env.XDG_CURRENT_DESKTOP || "";
     const gnomeVariants = ["GNOME", "GNOME-Classic", "ubuntu:GNOME"];
-    return gnomeVariants.some(d => xdgDesktop.includes(d));
+    if (!gnomeVariants.some(d => xdgDesktop.includes(d))) return false;
+
+    try {
+      const { execSync } = require("child_process");
+      execSync("dbus-send --session --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames 2>/dev/null | grep -q 'org.kde.StatusNotifierWatcher'", {
+        timeout: 2000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return false;
+    } catch {
+      return true;
+    }
   }
 
   _loadTrayIcon() {

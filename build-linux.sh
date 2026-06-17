@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script per compilare il progetto HA-CAM per Linux usando Docker
+# Script per compilare il progetto HomeSentinel per Linux usando Docker
 # Questo script usa l'immagine electronuserland/builder:wine per creare i pacchetti
 # AppImage, rpm e deb per Linux
 

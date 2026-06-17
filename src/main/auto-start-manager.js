@@ -60,7 +60,7 @@ class AutoStartManager {
   setAutoStartLinux(enabled) {
     try {
       const autostartDir = path.join(process.env.HOME, ".config", "autostart");
-      const desktopFile = path.join(autostartDir, "ha-cam.desktop");
+      const desktopFile = path.join(autostartDir, "HomeSentinel.desktop");
 
       if (enabled) {
         if (!fs.existsSync(autostartDir)) {
@@ -90,14 +90,14 @@ class AutoStartManager {
 
         const desktopContent = `[Desktop Entry]
 Type=Application
-Name=Ha-Cam
+Name=HomeSentinel
 Comment=Home Assistant Camera Monitor
 Exec=${execPath} --autostart
 TryExec=${execPath}
 Icon=${iconPath}
 Terminal=false
 StartupNotify=true
-StartupWMClass=ha-cam
+StartupWMClass=HomeSentinel
 Categories=Utility;
 X-GNOME-Autostart-enabled=true
 X-MATE-Autostart-enabled=true
@@ -122,7 +122,7 @@ X-MATE-Autostart-enabled=true
   isAutoStartEnabledLinux() {
     try {
       const autostartDir = path.join(process.env.HOME, ".config", "autostart");
-      const desktopFile = path.join(autostartDir, "ha-cam.desktop");
+      const desktopFile = path.join(autostartDir, "HomeSentinel.desktop");
       return fs.existsSync(desktopFile);
     } catch (error) {
       console.error("Errore nel verificare l'avvio automatico su Linux:", error);

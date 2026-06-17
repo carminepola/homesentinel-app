@@ -2,8 +2,8 @@
 const appConfig = {
   // Informazioni sull'applicazione
   app: {
-    name: "Ha-Cam",
-    updateUrl: "https://git.devmin.it/api/v4/projects/24/releases",
+    name: "HomeSentinel",
+    updateUrl: "https://git.devmin.it/api/v4/projects/29/releases",
   },
 
   // Percorsi delle risorse
