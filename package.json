@@ -38,6 +38,7 @@
   "build": {
     "appId": "it.devmin.homesentinel",
     "productName": "homesentinel",
+    "publish": null,
     "directories": {
       "output": "dist"
     },
