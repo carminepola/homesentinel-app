@@ -25,7 +25,11 @@
     "name": "Carmine Pola",
     "email": "carminepola@devmin.it"
   },
-  "homepage": "https://git.devmin.it/carmine/homesentinel",
+  "homepage": "https://git.devmin.it/carmine/homesentinel-app",
+  "repository": {
+    "type": "git",
+    "url": "https://git.devmin.it/carmine/homesentinel-app.git"
+  },
   "license": "MIT",
   "devDependencies": {
     "electron": "^42.2.0",
