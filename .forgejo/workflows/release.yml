@@ -270,8 +270,10 @@ jobs:
           for FILE in dist/*; do
             [ -f "$FILE" ] || continue
             NAME=$(basename "$FILE")
+            # URL-encode the filename (handles spaces, parentheses, etc.)
+            NAME_ENC=$(printf '%s' "$NAME" | jq -sRr @uri)
             echo "Uploading ${NAME}..."
-            curl -sS -X POST "${API}/releases/${RELEASE_ID}/assets?name=${NAME}" \
+            curl -sS -X POST "${API}/releases/${RELEASE_ID}/assets?name=${NAME_ENC}" \
               -H "${AUTH}" \
               -H "Content-Type: application/octet-stream" \
               --data-binary "@${FILE}"
