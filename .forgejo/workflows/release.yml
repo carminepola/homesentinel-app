@@ -237,7 +237,7 @@ jobs:
 
           # Build JSON body (escape newlines for JSON)
           BODY=$(jq -Rs --arg v "$VERSION" '{
-            tag_name: $ENV.TAG,
+            tag_name: $TAG,
             name: ("HomeSentinel v" + $v),
             body: .,
             draft: false,
