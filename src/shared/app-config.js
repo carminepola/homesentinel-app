@@ -3,7 +3,7 @@ const appConfig = {
   // Informazioni sull'applicazione
   app: {
     name: "HomeSentinel",
-    updateUrl: "https://git.devmin.it/api/v4/projects/29/releases",
+    updateUrl: "https://git.devmin.it/api/v1/repos/carmine/homesentinel-app/releases/latest",
   },
 
   // Percorsi delle risorse

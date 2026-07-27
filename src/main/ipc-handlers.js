@@ -369,21 +369,19 @@ class IPCHandlers {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const releases = await response.json();
-      if (!releases || releases.length === 0) {
+      const latestRelease = await response.json();
+      if (!latestRelease || !latestRelease.tag_name) {
         return { hasUpdate: false, currentVersion };
       }
 
-      const latestRelease = releases[0];
       const tagName = (latestRelease.tag_name || "").replace(/^v/, "");
-
       const isUpdateAvailable = this.compareVersions(tagName, currentVersion) > 0;
 
       let assetUrls = [];
-      if (latestRelease.assets && latestRelease.assets.links) {
-        assetUrls = latestRelease.assets.links.map((link) => ({
-          name: link.name,
-          url: link.url,
+      if (latestRelease.assets && Array.isArray(latestRelease.assets)) {
+        assetUrls = latestRelease.assets.map((asset) => ({
+          name: asset.name,
+          url: asset.browser_download_url,
         }));
       }
 
@@ -391,8 +389,8 @@ class IPCHandlers {
         hasUpdate: isUpdateAvailable,
         currentVersion,
         latestVersion: tagName,
-        releaseUrl: latestRelease._links?.self || "",
-        releaseDescription: latestRelease.description || "",
+        releaseUrl: latestRelease.url || "",
+        releaseDescription: latestRelease.body || "",
         isBeta: isBeta,
         assets: assetUrls,
       };
