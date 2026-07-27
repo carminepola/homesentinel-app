@@ -226,8 +226,15 @@ jobs:
           ENDOFDESC
 
       - name: Create Forgejo Release
-        uses: https://code.forgejo.org/forgejo/release@v1
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           name: "HomeSentinel v${{ needs.set_version.outputs.build_version }}"
           body_path: release_desc.md
+          files: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+            dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
