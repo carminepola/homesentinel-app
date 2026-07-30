@@ -35,6 +35,10 @@ const defaultSettings = {
     pinEnabled: false,
     pin: "",
   },
+  gateSettings: {
+    intercomSensorId: "",
+    gateLockId: "",
+  },
 };
 
 module.exports = { defaultSettings };

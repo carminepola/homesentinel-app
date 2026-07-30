@@ -1,4 +1,5 @@
 const appConfig = require("../shared/app-config");
+const { ALARM_STATES } = require("../shared/alarm-states");
 
 class MappingManager {
   constructor(appSettings, homeAssistantDevices) {
@@ -21,6 +22,42 @@ class MappingManager {
   init() {
     this.setupEventListeners();
     this.initializeSensorAutocomplete();
+    this.buildAlarmStateChecks();
+  }
+
+  buildAlarmStateChecks() {
+    const container = document.getElementById("mapping-alarm-states");
+    if (!container || container.childElementCount > 0) return;
+    ALARM_STATES.forEach((s) => {
+      const label = document.createElement("label");
+      label.className = "state-check";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = s.value;
+      input.checked = true;
+      const span = document.createElement("span");
+      span.textContent = s.label;
+      label.appendChild(input);
+      label.appendChild(span);
+      container.appendChild(label);
+    });
+  }
+
+  getSelectedAlarmStates() {
+    const states = [];
+    document.querySelectorAll("#mapping-alarm-states input[type='checkbox']").forEach((input) => {
+      if (input.checked) states.push(input.value);
+    });
+    return states;
+  }
+
+  setAlarmStateChecks(visibleStates) {
+    const selected = Array.isArray(visibleStates) && visibleStates.length > 0
+      ? visibleStates
+      : ALARM_STATES.map((s) => s.value);
+    document.querySelectorAll("#mapping-alarm-states input[type='checkbox']").forEach((input) => {
+      input.checked = selected.includes(input.value);
+    });
   }
 
   // Imposta gli event listener
@@ -207,6 +244,9 @@ class MappingManager {
       // Reinizializza l'autocomplete
       this.initializeSensorAutocomplete();
     }
+
+    // Aggiorna la lista per riflettere i nomi risolti dei dispositivi
+    this.updateSensorMappingsList();
   }
 
   // Migra gli URL legacy da camera_proxy a camera_proxy_stream
@@ -323,6 +363,8 @@ class MappingManager {
       sizeSelect.value = mapping.cameraSettings.size || "medium";
       customSizeContainer.style.display = "none";
     }
+
+    this.setAlarmStateChecks(mapping.visibleStates);
   }
 
   // Resetta il form del modale
@@ -332,6 +374,7 @@ class MappingManager {
     document.getElementById("mapping-duration").value = "10";
     document.getElementById("mapping-size").value = "medium";
     document.getElementById("mapping-stream-type").value = "auto";
+    this.setAlarmStateChecks(null);
   }
 
   // Salva la mappatura sensore-telecamera
@@ -391,6 +434,7 @@ class MappingManager {
       streamType: document.getElementById("mapping-stream-type")?.value || "auto",
       duration,
       cameraSettings,
+      visibleStates: this.getSelectedAlarmStates(),
     };
 
     console.log("Salvataggio mappatura:", mapping);
@@ -446,14 +490,22 @@ class MappingManager {
       mappingElement.className = "sensor-mapping";
 
       const sensorName = this.getSensorName(mapping.sensorId);
-      const cameraName = this.getCameraName(mapping.cameraId) || "URL personalizzato";
+      const cameraName = this.getCameraName(mapping.cameraId) || mapping.cameraId || "Telecamera";
       const streamTypeLabels = { auto: "Auto", hls: "HLS", mjpeg: "MJPEG" };
       const streamTypeLabel = streamTypeLabels[mapping.streamType] || "Auto";
+      const sizeName = this.getSizeName(mapping.cameraSettings.size);
+      const statesLabel = this.getVisibleStatesLabel(mapping.visibleStates);
 
       mappingElement.innerHTML = `
-        <div class="sensor-mapping-info">
-          <h4>${sensorName}</h4>
-          <p>Telecamera: ${cameraName} | Stream: ${streamTypeLabel} | Durata: ${mapping.duration}s | Dimensione: ${this.getSizeName(mapping.cameraSettings.size)}</p>
+        <div class="mapping-main">
+          <h4 class="mapping-title">${cameraName}</h4>
+          <span class="mapping-subtitle">Sensore: ${sensorName}</span>
+          <div class="mapping-meta">
+            <span class="meta-chip">Stream: ${streamTypeLabel}</span>
+            <span class="meta-chip">Durata: ${mapping.duration}s</span>
+            <span class="meta-chip">Dim: ${sizeName}</span>
+          </div>
+          <span class="mapping-states">Visibile in: ${statesLabel}</span>
         </div>
         <div class="sensor-mapping-actions">
           <button class="btn-edit" data-id="${mapping.id}">Modifica</button>
@@ -520,6 +572,15 @@ class MappingManager {
       vertical: "Verticale",
     };
     return sizes[size] || size;
+  }
+
+  // Ottiene l'etichetta degli stati in cui la camera e' visibile
+  getVisibleStatesLabel(visibleStates) {
+    if (!Array.isArray(visibleStates) || visibleStates.length === 0) {
+      return "Tutti gli stati";
+    }
+    const labels = ALARM_STATES.filter((s) => visibleStates.includes(s.value)).map((s) => s.label);
+    return labels.length > 0 ? labels.join(", ") : "Tutti gli stati";
   }
 
   showNotification(message, type = "info") {

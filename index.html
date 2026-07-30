@@ -254,6 +254,13 @@
                 </label>
                 <span class="status-text">Abilita allarme a tutto schermo</span>
               </div>
+              <div class="form-group" id="alarm-state-display" style="display:none">
+                <label>Stato attuale antifurto</label>
+                <div class="alarm-state-current">
+                  <span id="alarm-state-dot" class="status-dot offline"></span>
+                  <span id="alarm-state-text" class="status-text">Sconosciuto</span>
+                </div>
+              </div>
               <div id="alarm-config-fields">
                 <div class="form-group">
                   <label for="alarm-sensor">Sensore Allarme (alarm_control_panel)</label>
@@ -314,6 +321,23 @@
                   </div>
                   <p class="help-text">Il DnD viene attivato/disattivato solo nei giorni selezionati. Nei giorni non selezionati la pianificazione non modifica lo stato del DnD.</p>
                 </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Citofono / Cancello</h2>
+              <p class="help-text">Quando il sensore citofono scatta, ricevi una notifica con un pulsante per aprire il cancello.</p>
+              <div class="form-group">
+                <label for="intercom-sensor">Sensore Citofono (binary_sensor)</label>
+                <select id="intercom-sensor">
+                  <option value="">-- Seleziona un sensore --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="gate-lock">Entita' Cancello (lock)</label>
+                <select id="gate-lock">
+                  <option value="">-- Seleziona una entita' lock --</option>
+                </select>
               </div>
             </div>
 
@@ -444,6 +468,12 @@
                 <input type="number" id="mapping-custom-height" min="100" max="1080" value="240" />
               </div>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label>Visibile negli stati antifurto</label>
+            <div class="alarm-state-checks" id="mapping-alarm-states"></div>
+            <p class="help-text">La telecamera appare solo quando l'antifurto e' in uno degli stati selezionati. Se l'antifurto e' disattivato la telecamera e' sempre visibile.</p>
           </div>
         </div>
         <div class="modal-footer">

@@ -112,6 +112,13 @@ function setupEventListeners() {
       if (fields) {
         fields.style.display = alarmEnabledToggle.checked ? "block" : "none";
       }
+  refreshAlarmState();
+
+  // Citofono / Cancello
+  const intercomSensor = document.getElementById("intercom-sensor");
+  if (intercomSensor) intercomSensor.value = appSettings.gateSettings?.intercomSensorId || "";
+  const gateLock = document.getElementById("gate-lock");
+  if (gateLock) gateLock.value = appSettings.gateSettings?.gateLockId || "";
     });
   }
 
@@ -362,6 +369,8 @@ function updateUIFromSettings() {
     alarmPinGroup.style.display = appSettings.alarmSettings?.pinEnabled ? "block" : "none";
   }
 
+  refreshAlarmState();
+
   // Dark mode
   if (darkModeToggle && themeManager) {
     darkModeToggle.checked = themeManager.getCurrentTheme() === "dark";
@@ -442,6 +451,10 @@ async function saveSettings() {
       pinEnabled: document.getElementById("alarm-pin-enabled")?.checked || false,
       pin: document.getElementById("alarm-pin")?.value || "",
     },
+    gateSettings: {
+      intercomSensorId: document.getElementById("intercom-sensor")?.value || "",
+      gateLockId: document.getElementById("gate-lock")?.value || "",
+    },
     sensorCameraMappings: appSettings.sensorCameraMappings || [],
   };
 
@@ -519,6 +532,7 @@ async function loadHomeAssistantDevices() {
     homeAssistantDevices = devices;
     updateDeviceSelects();
     restoreAlarmSensorValue();
+    restoreGateValues();
     updateConnectionStatus(true);
 
     // Aggiorna i dispositivi nel MappingManager
@@ -585,12 +599,49 @@ function updateDeviceSelects() {
       }
     });
   }
+
+  const intercomSelect = document.getElementById("intercom-sensor");
+  if (intercomSelect) {
+    intercomSelect.innerHTML = '<option value="">-- Seleziona un sensore --</option>';
+
+    homeAssistantDevices.sensors.forEach((sensor) => {
+      if (sensor.entity_id.startsWith("binary_sensor.") || sensor.entity_id.startsWith("input_boolean.")) {
+        const option = document.createElement("option");
+        option.value = sensor.entity_id;
+        option.textContent = sensor.attributes.friendly_name || sensor.entity_id;
+        intercomSelect.appendChild(option);
+      }
+    });
+  }
+
+  const gateLockSelect = document.getElementById("gate-lock");
+  if (gateLockSelect) {
+    gateLockSelect.innerHTML = '<option value="">-- Seleziona una entita\' lock --</option>';
+
+    (homeAssistantDevices.locks || []).forEach((lock) => {
+      const option = document.createElement("option");
+      option.value = lock.entity_id;
+      option.textContent = lock.attributes.friendly_name || lock.entity_id;
+      gateLockSelect.appendChild(option);
+    });
+  }
 }
 
 function restoreAlarmSensorValue() {
   const alarmSensorSelect = document.getElementById("alarm-sensor");
   if (alarmSensorSelect && appSettings.alarmSettings?.sensorId) {
     alarmSensorSelect.value = appSettings.alarmSettings.sensorId;
+  }
+}
+
+function restoreGateValues() {
+  const intercomSelect = document.getElementById("intercom-sensor");
+  if (intercomSelect && appSettings.gateSettings?.intercomSensorId) {
+    intercomSelect.value = appSettings.gateSettings.intercomSensorId;
+  }
+  const gateLockSelect = document.getElementById("gate-lock");
+  if (gateLockSelect && appSettings.gateSettings?.gateLockId) {
+    gateLockSelect.value = appSettings.gateSettings.gateLockId;
   }
 }
 
@@ -865,6 +916,47 @@ ipcRenderer.on("dnd-mode-changed", (event, dndMode) => {
 ipcRenderer.on("connection-status-changed", (event, isConnected) => {
   updateConnectionStatus(isConnected);
 });
+
+ipcRenderer.on("alarm-state-changed", (event, state) => {
+  updateAlarmStateDisplay(state);
+});
+
+function updateAlarmStateDisplay(state) {
+  const display = document.getElementById("alarm-state-display");
+  const text = document.getElementById("alarm-state-text");
+  const dot = document.getElementById("alarm-state-dot");
+  if (!display || !text || !dot) return;
+
+  const { getAlarmStateLabel } = require("./src/shared/alarm-states");
+  text.textContent = getAlarmStateLabel(state);
+
+  dot.classList.remove("triggered", "armed", "disarmed", "offline");
+  const lower = (state || "").toLowerCase();
+  if (lower === "triggered") {
+    dot.classList.add("triggered");
+  } else if (lower.startsWith("armed")) {
+    dot.classList.add("armed");
+  } else if (lower === "disarmed") {
+    dot.classList.add("disarmed");
+  } else {
+    dot.classList.add("offline");
+  }
+}
+
+async function refreshAlarmState() {
+  const display = document.getElementById("alarm-state-display");
+  const alarmEnabled = document.getElementById("alarm-enabled")?.checked;
+  if (display) {
+    display.style.display = alarmEnabled ? "block" : "none";
+  }
+  if (!alarmEnabled) return;
+  try {
+    const result = await ipcRenderer.invoke("get-alarm-state");
+    updateAlarmStateDisplay(result?.state);
+  } catch (error) {
+    console.error("Errore nel recupero dello stato antifurto:", error);
+  }
+}
 
 // Update sensor status periodically
 setInterval(updateSensorStatus, 5000);

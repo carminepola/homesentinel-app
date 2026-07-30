@@ -78,6 +78,13 @@ class IPCHandlers {
       return this.handleGetDndStatus();
     });
 
+    ipcMain.handle("get-alarm-state", () => {
+      if (this.websocketManager) {
+        return { state: this.websocketManager.getAlarmState() };
+      }
+      return { state: null };
+    });
+
     ipcMain.handle("hide-window", () => {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.hide();
@@ -135,10 +142,13 @@ class IPCHandlers {
     const alarmChanged = JSON.stringify(oldSettings.alarmSettings) !==
                        JSON.stringify(settings.alarmSettings);
 
+    const gateChanged = JSON.stringify(oldSettings.gateSettings) !==
+                      JSON.stringify(settings.gateSettings);
+
     if (haSettingsChanged) {
       this.websocketManager.closeConnection();
       this.websocketManager.connectToHomeAssistant();
-    } else if (mappingsChanged || alarmChanged) {
+    } else if (mappingsChanged || alarmChanged || gateChanged) {
       this.websocketManager.updateSubscriptions();
     }
 
@@ -188,8 +198,11 @@ class IPCHandlers {
       const cameras = states.filter((state) =>
         state.entity_id.startsWith("camera.")
       );
+      const locks = states.filter((state) =>
+        state.entity_id.startsWith("lock.")
+      );
       
-      return { sensors, cameras };
+      return { sensors, cameras, locks };
     } catch (error) {
       return { error: error.message };
     }

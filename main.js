@@ -6,7 +6,7 @@ if (process.platform === "linux" && !process.argv.includes("--ozone-platform=x11
   return;
 }
 
-const { BrowserWindow, Menu, Notification, powerMonitor } = require("electron");
+const { BrowserWindow, Menu, Notification, powerMonitor, dialog } = require("electron");
 const path = require("path");
 
 // Importa i moduli
@@ -20,6 +20,8 @@ const StreamPreWarmer = require("./src/main/stream-prewarmer");
 const DndScheduler = require("./src/main/dnd-scheduler");
 const IPCHandlers = require("./src/main/ipc-handlers");
 const appConfig = require("./src/shared/app-config");
+const { isCameraVisibleInState } = require("./src/shared/alarm-states");
+
 
 // Variabili globali
 let mainWindow;
@@ -35,6 +37,7 @@ let dndScheduler;
 let ipcHandlers;
 let isWebSocketConnected = false;
 let isSystemLocked = false;
+let isAlarmTriggered = false;
 let gotTheLock;
 const isAutoStart = process.argv.includes("--autostart");
 
@@ -146,15 +149,25 @@ function setupEventCallbacks() {
   websocketManager.setEventCallbacks({
     onSensorEvent: (eventData) => {
       const dndMode = trayManager.getDndMode();
-      if (dndMode || isSystemLocked) {
+      if (dndMode || isSystemLocked || isAlarmTriggered) {
         return;
+      }
+      const settings = settingsManager.getSettings();
+      if (settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId) {
+        const alarmState = websocketManager.getAlarmState();
+        if (!isCameraVisibleInState(eventData.mapping, alarmState)) {
+          return;
+        }
       }
       pipWindowManager.handleSensorEvent(eventData);
     },
     onAlarmEvent: (alarmData) => {
       if (alarmData.dismissed) {
         alarmWindowManager.dismissAlarm(alarmData.sensorState);
+        isAlarmTriggered = false;
       } else {
+        isAlarmTriggered = true;
+        pipWindowManager.closeAllPiPWindows();
         alarmWindowManager.triggerAlarm(alarmData);
       }
     },
@@ -171,6 +184,14 @@ function setupEventCallbacks() {
         }).show();
       }
     },
+    onAlarmStateChange: (alarmData) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("alarm-state-changed", alarmData.sensorState);
+      }
+    },
+    onIntercomEvent: () => {
+      showIntercomDialog();
+    },
   });
 
   trayManager.setEventCallbacks({
@@ -181,6 +202,49 @@ function setupEventCallbacks() {
       app.quit();
     },
   });
+}
+
+// Mostra il dialogo del citofono con pulsante per aprire il cancello
+function showIntercomDialog() {
+  const settings = settingsManager.getSettings();
+  const gateSettings = settings.gateSettings || {};
+  if (!gateSettings.intercomSensorId) return;
+
+  if (!gateSettings.gateLockId) {
+    new Notification({
+      title: appConfig.app.name,
+      body: "Qualcuno al cancello (citofono)",
+      silent: false,
+    }).show();
+    return;
+  }
+
+  const targetWindow = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : null;
+  dialog.showMessageBox(targetWindow, {
+    type: "info",
+    title: appConfig.app.name,
+    message: "Qualcuno al cancello",
+    detail: "Vuoi aprire il cancello?",
+    buttons: ["Apri cancello", "Chiudi"],
+    defaultId: 0,
+    cancelId: 1,
+  }).then((result) => {
+    if (result.response === 0) {
+      openGate();
+    }
+  });
+}
+
+// Apre il cancello tramite il servizio lock.open di Home Assistant
+async function openGate() {
+  const settings = settingsManager.getSettings();
+  const gateLockId = settings.gateSettings?.gateLockId;
+  if (!gateLockId || !websocketManager) return;
+
+  const result = await websocketManager.callService("lock", "open", { entity_id: gateLockId });
+  if (!result.success) {
+    console.error("Apertura cancello fallito:", result.error);
+  }
 }
 
 // Eventi dell'applicazione
@@ -231,7 +295,12 @@ if (!gotTheLock) {
         app.quit();
       });
 
+
       setupEventCallbacks();
+
+      alarmWindowManager.setOnAlarmDismissed(() => {
+        isAlarmTriggered = false;
+      });
 
       streamPreWarmer.start();
       dndScheduler.start();

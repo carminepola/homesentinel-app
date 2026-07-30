@@ -9,12 +9,17 @@ class AlarmWindowManager {
     this.websocketManager = null;
     this.alarmTriggered = false;
     this.alarmStartTime = null;
+    this.onAlarmDismissed = null;
 
     this.setupIpcHandlers();
   }
 
   setWebSocketManager(websocketManager) {
     this.websocketManager = websocketManager;
+  }
+
+  setOnAlarmDismissed(callback) {
+    this.onAlarmDismissed = callback;
   }
 
   setupIpcHandlers() {
@@ -170,6 +175,46 @@ class AlarmWindowManager {
 
     this.alarmTriggered = false;
     this.closeAlarmWindow();
+    if (this.onAlarmDismissed) this.onAlarmDismissed();
+  }
+
+  async userDismissAlarm() {
+    if (!this.alarmTriggered) return;
+
+    await this.disarmAlarm();
+    this.alarmTriggered = false;
+    this.closeAlarmWindow();
+    if (this.onAlarmDismissed) this.onAlarmDismissed();
+  }
+
+  async disarmAlarm() {
+    const settings = this.settingsManager.getSettings();
+    const alarmConfig = settings.alarmSettings || {};
+    const entityId = alarmConfig.sensorId;
+
+    if (!entityId || !this.websocketManager) {
+      return;
+    }
+
+    const serviceData = { entity_id: entityId };
+    if (alarmConfig.pin) {
+      serviceData.code = alarmConfig.pin;
+    }
+
+    try {
+      const result = await this.websocketManager.callService(
+        "alarm_control_panel",
+        "alarm_disarm",
+        serviceData
+      );
+      if (!result.success) {
+        console.error("Disarm antifurto fallito:", result.error || result.result?.error?.message);
+      }
+      return result;
+    } catch (error) {
+      console.error("Errore nel disarm dell'antifurto:", error.message);
+      return { success: false, error: error.message };
+    }
   }
 
   closeAlarmWindow() {
@@ -203,7 +248,7 @@ class AlarmWindowManager {
       return { requiresPin: true };
     }
 
-    this.closeAlarmWindow();
+    this.userDismissAlarm();
     return { requiresPin: false };
   }
 
@@ -212,6 +257,7 @@ class AlarmWindowManager {
     const alarmConfig = settings.alarmSettings || {};
 
     if (alarmConfig.pin && pin === alarmConfig.pin) {
+      this.userDismissAlarm();
       return { success: true };
     }
 

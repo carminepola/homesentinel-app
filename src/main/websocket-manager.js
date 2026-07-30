@@ -15,12 +15,16 @@ class WebSocketManager {
     this.onSensorEvent = null;
     this.onConnectionStatusChange = null;
     this.onAlarmEvent = null;
+    this.onAlarmStateChange = null;
+    this.onIntercomEvent = null;
   }
 
   setEventCallbacks(callbacks) {
     this.onSensorEvent = callbacks.onSensorEvent;
     this.onConnectionStatusChange = callbacks.onConnectionStatusChange;
     this.onAlarmEvent = callbacks.onAlarmEvent || null;
+    this.onAlarmStateChange = callbacks.onAlarmStateChange || null;
+    this.onIntercomEvent = callbacks.onIntercomEvent || null;
   }
 
   connectToHomeAssistant() {
@@ -108,8 +112,10 @@ class WebSocketManager {
   subscribeToStateChanges() {
     const settings = this.settingsManager.getSettings();
 
+    const hasGate = !!(settings.gateSettings?.intercomSensorId || settings.gateSettings?.gateLockId);
     if (settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0 ||
-        (settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId)) {
+        (settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId) ||
+        hasGate) {
       setTimeout(() => {
         const subscriptionId = this.getNextSubscriptionId();
         const message = {
@@ -132,6 +138,7 @@ class WebSocketManager {
         if (this.onConnectionStatusChange) {
           this.onConnectionStatusChange(true);
         }
+        this.fetchInitialAlarmState();
       }
     }
   }
@@ -157,6 +164,15 @@ class WebSocketManager {
       if (alarmSettings.enabled && alarmSettings.sensorId === entity_id) {
         const friendlyName = new_state?.attributes?.friendly_name || entity_id;
 
+        if (this.onAlarmStateChange) {
+          this.onAlarmStateChange({
+            entity_id,
+            sensorState,
+            previousState,
+            sensorName: friendlyName,
+          });
+        }
+
         if (sensorState.toLowerCase() === "triggered") {
           if (this.onAlarmEvent) {
             this.onAlarmEvent({
@@ -179,6 +195,17 @@ class WebSocketManager {
     }
 
     const mapping = settings.sensorCameraMappings?.find((m) => m.sensorId === entity_id);
+
+    // Rilevamento citofono: notifica quando il sensore associato passa a "on"
+    const gateSettings = settings.gateSettings;
+    if (gateSettings?.intercomSensorId && entity_id === gateSettings.intercomSensorId) {
+      const isOn = ["on", "true", "1"].includes((sensorState || "").toLowerCase());
+      const wasOn = ["on", "true", "1"].includes((previousState || "").toLowerCase());
+      if (isOn && !wasOn && this.onIntercomEvent) {
+        this.onIntercomEvent({ entity_id, sensorState });
+      }
+    }
+
     if (!mapping) {
       return;
     }
@@ -269,7 +296,8 @@ class WebSocketManager {
     const settings = this.settingsManager.getSettings();
     const hasMappings = settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0;
     const alarmEnabled = settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId;
-    const needsSubscription = hasMappings || alarmEnabled;
+    const hasGate = !!(settings.gateSettings?.intercomSensorId || settings.gateSettings?.gateLockId);
+    const needsSubscription = hasMappings || alarmEnabled || hasGate;
     const isSubscribed = Array.from(this.subscriptionIds.values()).includes("state_changed");
 
     if (needsSubscription && !isSubscribed) {
@@ -300,6 +328,46 @@ class WebSocketManager {
 
   getSensorStates() {
     return this.sensorStates;
+  }
+
+  getAlarmState() {
+    const settings = this.settingsManager.getSettings();
+    const sensorId = settings.alarmSettings?.sensorId;
+    if (!sensorId) return null;
+    return this.sensorStates.get(sensorId) || null;
+  }
+
+  async fetchInitialAlarmState() {
+    const settings = this.settingsManager.getSettings();
+    const sensorId = settings.alarmSettings?.sensorId;
+    if (!settings.homeAssistantUrl || !settings.homeAssistantToken || !sensorId) {
+      return;
+    }
+    try {
+      const response = await fetch(
+        `${settings.homeAssistantUrl.replace(/\/$/, "")}/api/states/${sensorId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${settings.homeAssistantToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      if (!response.ok) return;
+      const stateObj = await response.json();
+      const state = stateObj?.state || "unknown";
+      this.sensorStates.set(sensorId, state);
+      if (this.onAlarmStateChange) {
+        this.onAlarmStateChange({
+          entity_id: sensorId,
+          sensorState: state,
+          previousState: state,
+          sensorName: stateObj?.attributes?.friendly_name || sensorId,
+        });
+      }
+    } catch (error) {
+      console.error("Errore nel recupero dello stato iniziale dell'antifurto:", error.message);
+    }
   }
 
   async getCameraUrlWithToken(cameraId, homeAssistantUrl, homeAssistantToken, useHLS = false) {
@@ -430,6 +498,52 @@ class WebSocketManager {
 
   getNextSubscriptionId() {
     return this.subscriptionCounter++;
+  }
+
+  async callService(domain, service, serviceData = {}) {
+    if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
+      return { success: false, error: "WebSocket non connesso" };
+    }
+
+    const id = this.getNextSubscriptionId();
+    return new Promise((resolve) => {
+      let settled = false;
+      const handler = (data) => {
+        try {
+          const msg = JSON.parse(data);
+          if (msg.id !== id) return;
+          if (settled) return;
+          settled = true;
+          this.wsConnection.off("message", handler);
+          resolve({ success: !!msg.success, result: msg });
+        } catch (e) {
+          // ignore parse errors for unrelated messages
+        }
+      };
+
+      this.wsConnection.on("message", handler);
+
+      try {
+        this.wsConnection.send(JSON.stringify({
+          id,
+          type: "call_service",
+          domain,
+          service,
+          service_data: serviceData,
+        }));
+      } catch (e) {
+        this.wsConnection.off("message", handler);
+        resolve({ success: false, error: e.message });
+        return;
+      }
+
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.wsConnection.off("message", handler);
+        resolve({ success: false, error: "timeout" });
+      }, 5000);
+    });
   }
 }
 
