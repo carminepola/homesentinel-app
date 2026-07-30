@@ -3,6 +3,13 @@ const defaultSettings = {
   homeAssistantToken: "",
   autoStart: false,
   dndMode: false,
+  dndSchedule: {
+    enabled: false,
+    startTime: "18:00",
+    endTime: "09:00",
+    // Indici in ordine getDay(): 0=Domenica ... 6=Sabato
+    days: [false, false, false, false, false, false, false],
+  },
   sensorCameraMappings: [],
   pipSettings: {
     defaultDuration: 10,

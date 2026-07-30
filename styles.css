@@ -791,6 +791,35 @@ input[type="password"]::placeholder {
   align-items: flex-end;
 }
 
+.dnd-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.dnd-days .day-check {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  user-select: none;
+  min-width: 2.75rem;
+}
+
+.dnd-days .day-check input {
+  margin: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  cursor: pointer;
+}
+
+.dnd-days .day-check span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
 .input-group {
   flex: 1;
 }

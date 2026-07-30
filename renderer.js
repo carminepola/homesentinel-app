@@ -115,6 +115,15 @@ function setupEventListeners() {
     });
   }
 
+  // Event listener per il toggle pianificazione DnD
+  const dndScheduleEnabled = document.getElementById("dnd-schedule-enabled");
+  if (dndScheduleEnabled) {
+    dndScheduleEnabled.addEventListener("change", () => {
+      const fields = document.getElementById("dnd-schedule-fields");
+      if (fields) fields.style.display = dndScheduleEnabled.checked ? "block" : "none";
+    });
+  }
+
   // Event listener per il toggle PIN allarme
   const alarmPinEnabled = document.getElementById("alarm-pin-enabled");
   if (alarmPinEnabled) {
@@ -366,6 +375,22 @@ function updateUIFromSettings() {
     dndStatus.textContent = appSettings.dndMode ? "Attivato" : "Disattivato";
   }
 
+  // Pianificazione DnD
+  const dndSchedule = appSettings.dndSchedule || {};
+  const schedEnabled = document.getElementById("dnd-schedule-enabled");
+  const schedStart = document.getElementById("dnd-schedule-start");
+  const schedEnd = document.getElementById("dnd-schedule-end");
+  const schedFields = document.getElementById("dnd-schedule-fields");
+  if (schedEnabled) schedEnabled.checked = !!dndSchedule.enabled;
+  if (schedStart) schedStart.value = dndSchedule.startTime || "18:00";
+  if (schedEnd) schedEnd.value = dndSchedule.endTime || "09:00";
+  if (schedFields) schedFields.style.display = dndSchedule.enabled ? "block" : "none";
+  const days = dndSchedule.days || [false, false, false, false, false, false, false];
+  document.querySelectorAll("#dnd-schedule-days input[type='checkbox']").forEach((input) => {
+    const idx = parseInt(input.getAttribute("data-day"), 10);
+    input.checked = !!days[idx];
+  });
+
   // Update sensor mappings list
   if (mappingManager) {
     mappingManager.updateSensorMappingsList();
@@ -379,6 +404,19 @@ async function saveSettings() {
     homeAssistantToken: document.getElementById("ha-token")?.value || "",
     autoStart: document.getElementById("auto-start-toggle")?.checked || false,
     dndMode: appSettings.dndMode || false,
+    dndSchedule: {
+      enabled: document.getElementById("dnd-schedule-enabled")?.checked || false,
+      startTime: document.getElementById("dnd-schedule-start")?.value || "18:00",
+      endTime: document.getElementById("dnd-schedule-end")?.value || "09:00",
+      days: (() => {
+        const arr = [false, false, false, false, false, false, false];
+        document.querySelectorAll("#dnd-schedule-days input[type='checkbox']").forEach((input) => {
+          const idx = parseInt(input.getAttribute("data-day"), 10);
+          if (!isNaN(idx)) arr[idx] = input.checked;
+        });
+        return arr;
+      })(),
+    },
     pipSettings: {
       defaultDuration: parseInt(document.getElementById("pip-duration")?.value || 10),
       position: document.getElementById("pip-position")?.value || "top-right",

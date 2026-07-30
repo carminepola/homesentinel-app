@@ -17,6 +17,7 @@ const AlarmWindowManager = require("./src/main/alarm-window-manager");
 const TrayManager = require("./src/main/tray-manager");
 const AutoStartManager = require("./src/main/auto-start-manager");
 const StreamPreWarmer = require("./src/main/stream-prewarmer");
+const DndScheduler = require("./src/main/dnd-scheduler");
 const IPCHandlers = require("./src/main/ipc-handlers");
 const appConfig = require("./src/shared/app-config");
 
@@ -30,6 +31,7 @@ let alarmWindowManager;
 let trayManager;
 let autoStartManager;
 let streamPreWarmer;
+let dndScheduler;
 let ipcHandlers;
 let isWebSocketConnected = false;
 let isSystemLocked = false;
@@ -135,6 +137,7 @@ function initializeManagers() {
   autoStartManager = new AutoStartManager(settingsManager);
   streamPreWarmer = new StreamPreWarmer(settingsManager, websocketManager);
   pipWindowManager.setStreamPreWarmer(streamPreWarmer);
+  dndScheduler = new DndScheduler(settingsManager, trayManager);
   // ipcHandlers verrà inizializzato dopo la creazione della finestra
 }
 
@@ -223,7 +226,7 @@ if (!gotTheLock) {
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
-      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, () => {
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, dndScheduler, () => {
         isQuitting = true;
         app.quit();
       });
@@ -231,6 +234,7 @@ if (!gotTheLock) {
       setupEventCallbacks();
 
       streamPreWarmer.start();
+      dndScheduler.start();
 
       // Configura i gestori per gli eventi di blocco/sblocco del sistema
       powerMonitor.on("lock-screen", () => {
@@ -318,6 +322,9 @@ if (!gotTheLock) {
       }
       if (streamPreWarmer) {
         streamPreWarmer.stop();
+      }
+      if (dndScheduler) {
+        dndScheduler.stop();
       }
       if (websocketManager) {
         websocketManager.closeConnection();

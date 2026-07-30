@@ -2,7 +2,7 @@ const { ipcMain, dialog, app, shell } = require("electron");
 const appConfig = require("../shared/app-config");
 
 class IPCHandlers {
-  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, onQuitCallback) {
+  constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, dndScheduler, onQuitCallback) {
     this.mainWindow = mainWindow;
     this.settingsManager = settingsManager;
     this.websocketManager = websocketManager;
@@ -11,6 +11,7 @@ class IPCHandlers {
     this.autoStartManager = autoStartManager;
     this.trayManager = trayManager;
     this.streamPreWarmer = streamPreWarmer;
+    this.dndScheduler = dndScheduler;
     this.onQuitCallback = onQuitCallback;
 
     this.setupIpcHandlers();
@@ -148,6 +149,12 @@ class IPCHandlers {
       if (this.streamPreWarmer) {
         this.streamPreWarmer.restart();
       }
+    }
+
+    const dndScheduleChanged = JSON.stringify(oldSettings.dndSchedule) !==
+                              JSON.stringify(settings.dndSchedule);
+    if (dndScheduleChanged && this.dndScheduler) {
+      this.dndScheduler.restart();
     }
 
     return true;

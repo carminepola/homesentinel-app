@@ -278,6 +278,46 @@
             </div>
 
             <div class="card">
+              <h2>Pianificazione Non Disturbare</h2>
+              <div class="toggle-container" style="margin-bottom: 1rem">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="dnd-schedule-enabled" />
+                  <span class="slider"></span>
+                </label>
+                <span class="status-text">Attiva il DnD automaticamente in base all'orario</span>
+              </div>
+              <div id="dnd-schedule-fields">
+                <div class="form-group">
+                  <label>Orari (formato 24h)</label>
+                  <div class="custom-size-inputs">
+                    <div class="input-group">
+                      <label for="dnd-schedule-start">Attiva alle</label>
+                      <input type="time" id="dnd-schedule-start" value="18:00" />
+                    </div>
+                    <div class="input-group">
+                      <label for="dnd-schedule-end">Disattiva alle</label>
+                      <input type="time" id="dnd-schedule-end" value="09:00" />
+                    </div>
+                  </div>
+                  <p class="help-text">Se l'orario di attivazione e' successivo a quello di disattivazione, il DnD resta attivo anche dopo la mezzanotte.</p>
+                </div>
+                <div class="form-group">
+                  <label>Giorni della settimana</label>
+                  <div class="dnd-days" id="dnd-schedule-days">
+                    <label class="day-check"><input type="checkbox" data-day="1" /><span>Lun</span></label>
+                    <label class="day-check"><input type="checkbox" data-day="2" /><span>Mar</span></label>
+                    <label class="day-check"><input type="checkbox" data-day="3" /><span>Mer</span></label>
+                    <label class="day-check"><input type="checkbox" data-day="4" /><span>Gio</span></label>
+                    <label class="day-check"><input type="checkbox" data-day="5" /><span>Ven</span></label>
+                    <label class="day-check"><input type="checkbox" data-day="6" /><span>Sab</span></label>
+                    <label class="day-check"><input type="checkbox" data-day="0" /><span>Dom</span></label>
+                  </div>
+                  <p class="help-text">Il DnD viene attivato/disattivato solo nei giorni selezionati. Nei giorni non selezionati la pianificazione non modifica lo stato del DnD.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
               <h2>Gestione Impostazioni</h2>
               <div class="form-actions">
                 <button id="export-settings-btn" class="btn secondary">Esporta Impostazioni</button>
