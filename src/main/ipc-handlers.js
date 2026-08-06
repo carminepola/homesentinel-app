@@ -1,5 +1,30 @@
 const { ipcMain, dialog, app, shell } = require("electron");
+const { execSync } = require("child_process");
 const appConfig = require("../shared/app-config");
+
+function getInstallationType() {
+  if (process.platform !== 'linux') return process.platform;
+  
+  if (process.env.APPIMAGE) {
+    return 'AppImage';
+  }
+  
+  try {
+    execSync('rpm -q HomeSentinel', { stdio: 'ignore' });
+    return 'RPM';
+  } catch (e) {
+    // Not RPM
+  }
+  
+  try {
+    execSync('dpkg -l homesentinel', { stdio: 'ignore' });
+    return 'DEB';
+  } catch (e) {
+    // Not DEB
+  }
+  
+  return 'unknown';
+}
 
 class IPCHandlers {
   constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, dndScheduler, onQuitCallback) {
@@ -116,6 +141,10 @@ class IPCHandlers {
         sensorName: "Test Allarme",
         state: "triggered",
       });
+    });
+
+    ipcMain.handle("get-installation-type", () => {
+      return getInstallationType();
     });
   }
 
