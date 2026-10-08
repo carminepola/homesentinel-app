@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Citofono - HomeSentinel</title>
+    <link rel="stylesheet" href="intercom-styles.css" />
+  </head>
+  <body>
+    <div class="intercom-dialog">
+      <div class="intercom-header">
+        <div class="intercom-icon-wrapper">
+          <svg class="intercom-icon" xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+          </svg>
+        </div>
+        <h1 class="intercom-title">Qualcuno al cancello</h1>
+        <p class="intercom-subtitle">Vuoi aprire il cancello?</p>
+      </div>
+
+      <div class="intercom-countdown" id="intercom-countdown-wrapper">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>Si chiude tra <span id="intercom-countdown">2:00</span></span>
+      </div>
+
+      <div class="intercom-actions">
+        <button class="intercom-open-btn" id="intercom-open-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+          </svg>
+          Apri cancello
+        </button>
+        <button class="intercom-close-btn" id="intercom-close-btn">Chiudi</button>
+      </div>
+    </div>
+
+    <script src="intercom-renderer.js"></script>
+  </body>
+</html>

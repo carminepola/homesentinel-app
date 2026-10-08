@@ -6,7 +6,7 @@ if (process.platform === "linux" && !process.argv.includes("--ozone-platform=x11
   return;
 }
 
-const { BrowserWindow, Menu, Notification, powerMonitor, dialog } = require("electron");
+const { BrowserWindow, Menu, Notification, powerMonitor } = require("electron");
 const { execSync } = require("child_process");
 const path = require("path");
 
@@ -39,6 +39,7 @@ const SettingsManager = require("./src/shared/settings-manager");
 const WebSocketManager = require("./src/main/websocket-manager");
 const PiPWindowManager = require("./src/main/pip-window-manager");
 const AlarmWindowManager = require("./src/main/alarm-window-manager");
+const IntercomWindowManager = require("./src/main/intercom-window-manager");
 const TrayManager = require("./src/main/tray-manager");
 const AutoStartManager = require("./src/main/auto-start-manager");
 const StreamPreWarmer = require("./src/main/stream-prewarmer");
@@ -55,6 +56,7 @@ let settingsManager;
 let websocketManager;
 let pipWindowManager;
 let alarmWindowManager;
+let intercomWindowManager;
 let trayManager;
 let autoStartManager;
 let streamPreWarmer;
@@ -161,6 +163,10 @@ function initializeManagers() {
   pipWindowManager.setWebSocketManager(websocketManager);
   alarmWindowManager = new AlarmWindowManager(settingsManager);
   alarmWindowManager.setWebSocketManager(websocketManager);
+  intercomWindowManager = new IntercomWindowManager(settingsManager);
+  intercomWindowManager.setOnOpenGate(() => {
+    openGate();
+  });
   trayManager = new TrayManager(settingsManager);
   autoStartManager = new AutoStartManager(settingsManager);
   streamPreWarmer = new StreamPreWarmer(settingsManager, websocketManager);
@@ -229,7 +235,8 @@ function setupEventCallbacks() {
   });
 }
 
-// Mostra il dialogo del citofono con pulsante per aprire il cancello
+// Mostra il popup del citofono con pulsante per aprire il cancello.
+// Il popup si chiude automaticamente dopo 2 minuti (config: appConfig.intercom.autoCloseMs)
 function showIntercomDialog() {
   const settings = settingsManager.getSettings();
   const gateSettings = settings.gateSettings || {};
@@ -244,20 +251,7 @@ function showIntercomDialog() {
     return;
   }
 
-  const targetWindow = (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : null;
-  dialog.showMessageBox(targetWindow, {
-    type: "info",
-    title: appConfig.app.name,
-    message: "Qualcuno al cancello",
-    detail: "Vuoi aprire il cancello?",
-    buttons: ["Apri cancello", "Chiudi"],
-    defaultId: 0,
-    cancelId: 1,
-  }).then((result) => {
-    if (result.response === 0) {
-      openGate();
-    }
-  });
+  intercomWindowManager.showDialog();
 }
 
 // Apre il cancello tramite il servizio lock.open di Home Assistant
@@ -413,6 +407,9 @@ if (!gotTheLock) {
       }
       if (alarmWindowManager) {
         alarmWindowManager.closeAlarmWindow();
+      }
+      if (intercomWindowManager) {
+        intercomWindowManager.closeIntercomWindow();
       }
       if (streamPreWarmer) {
         streamPreWarmer.stop();

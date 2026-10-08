@@ -13,6 +13,7 @@ const appConfig = {
     trayIcon: "assets/tray-icon.png",
     mainWindowHtml: "index.html",
     pipWindowHtml: "pip.html",
+    intercomWindowHtml: "intercom.html",
   },
 
   // Configurazione finestra principale
@@ -70,6 +71,26 @@ const appConfig = {
 
   // Configurazione finestra allarme
   alarmWindowHtml: "alarm.html",
+
+  // Configurazione finestra citofono
+  intercomWindow: {
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: false,
+    show: false,
+  },
+
+  // Durata di visualizzazione del popup citofono prima della chiusura automatica
+  intercom: {
+    autoCloseMs: 120000,
+  },
 
   // Posizioni predefinite per le finestre PiP
   pipPositions: {

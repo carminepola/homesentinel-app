@@ -181,6 +181,7 @@ class AlarmWindowManager {
   async userDismissAlarm() {
     if (!this.alarmTriggered) return;
 
+    // Imposta l'allarme su disattivato in Home Assistant
     await this.disarmAlarm();
     this.alarmTriggered = false;
     this.closeAlarmWindow();

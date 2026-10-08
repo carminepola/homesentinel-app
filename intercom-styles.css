@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  background: #12161f;
+  color: #fff;
+  user-select: none;
+}
+
+.intercom-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  height: 100vh;
+  padding: 1.5rem;
+  background: radial-gradient(ellipse at center, #1b2230 0%, #12161f 70%);
+  animation: intercomIn 0.25s ease-out;
+}
+
+@keyframes intercomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.intercom-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.intercom-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  animation: intercomRing 1.6s ease-in-out infinite;
+}
+
+@keyframes intercomRing {
+  0%, 100% { transform: rotate(0deg); }
+  10% { transform: rotate(12deg); }
+  20% { transform: rotate(-10deg); }
+  30% { transform: rotate(8deg); }
+  40% { transform: rotate(-6deg); }
+  50% { transform: rotate(0deg); }
+}
+
+.intercom-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.intercom-subtitle {
+  font-size: 0.9rem;
+  color: #9aa4b5;
+}
+
+.intercom-countdown {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: #9aa4b5;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+}
+
+.intercom-countdown #intercom-countdown {
+  font-weight: 600;
+  color: #d1d9e6;
+  font-variant-numeric: tabular-nums;
+}
+
+.intercom-actions {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 340px;
+}
+
+.intercom-actions button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.intercom-actions button:active {
+  transform: scale(0.97);
+}
+
+.intercom-open-btn {
+  flex: 2;
+  background: #2563eb;
+  color: #fff;
+}
+
+.intercom-open-btn:hover {
+  filter: brightness(1.15);
+}
+
+.intercom-close-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d1d9e6;
+}
+
+.intercom-close-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
