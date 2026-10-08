@@ -5,8 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Citofono - HomeSentinel</title>
     <link rel="stylesheet" href="intercom-styles.css" />
+    <script src="node_modules/hls.js/dist/hls.min.js"></script>
   </head>
   <body>
+    <div class="intercom-camera-bg" id="intercom-camera-bg" style="display: none">
+      <video id="intercom-camera-video" autoplay muted playsinline style="display: none"></video>
+      <img id="intercom-camera-img" alt="" style="display: none" />
+      <div class="intercom-camera-overlay"></div>
+    </div>
+
     <div class="intercom-dialog">
       <div class="intercom-header">
         <div class="intercom-icon-wrapper">

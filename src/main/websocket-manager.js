@@ -17,6 +17,7 @@ class WebSocketManager {
     this.onAlarmEvent = null;
     this.onAlarmStateChange = null;
     this.onIntercomEvent = null;
+    this.onGateLockOpened = null;
   }
 
   setEventCallbacks(callbacks) {
@@ -25,6 +26,7 @@ class WebSocketManager {
     this.onAlarmEvent = callbacks.onAlarmEvent || null;
     this.onAlarmStateChange = callbacks.onAlarmStateChange || null;
     this.onIntercomEvent = callbacks.onIntercomEvent || null;
+    this.onGateLockOpened = callbacks.onGateLockOpened || null;
   }
 
   connectToHomeAssistant() {
@@ -203,6 +205,15 @@ class WebSocketManager {
       const wasOn = ["on", "true", "1"].includes((previousState || "").toLowerCase());
       if (isOn && !wasOn && this.onIntercomEvent) {
         this.onIntercomEvent({ entity_id, sensorState });
+      }
+    }
+
+    // Rilevamento apertura cancello: il lucchetto passa a "unlocked"
+    if (gateSettings?.gateLockId && entity_id === gateSettings.gateLockId) {
+      const isOpen = ["unlocked", "open", "on"].includes((sensorState || "").toLowerCase());
+      const wasOpen = ["unlocked", "open", "on"].includes((previousState || "").toLowerCase());
+      if (isOpen && !wasOpen && this.onGateLockOpened) {
+        this.onGateLockOpened({ entity_id, sensorState, previousState });
       }
     }
 
@@ -502,10 +513,20 @@ class WebSocketManager {
 
   async callService(domain, service, serviceData = {}) {
     if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
+      console.error(`[WS-LOG] callService FALLEN: ws non connesso (readyState=${this.wsConnection?.readyState})`);
       return { success: false, error: "WebSocket non connesso" };
     }
 
     const id = this.getNextSubscriptionId();
+    const request = {
+      id,
+      type: "call_service",
+      domain,
+      service,
+      service_data: serviceData,
+    };
+    console.log(`[WS-LOG] callService INVIO: ${JSON.stringify(request)}`);
+
     return new Promise((resolve) => {
       let settled = false;
       const handler = (data) => {
@@ -515,6 +536,7 @@ class WebSocketManager {
           if (settled) return;
           settled = true;
           this.wsConnection.off("message", handler);
+          console.log(`[WS-LOG] callService RISPOSTA per id=${id}: ${JSON.stringify(msg)}`);
           resolve({ success: !!msg.success, result: msg });
         } catch (e) {
           // ignore parse errors for unrelated messages
@@ -524,15 +546,10 @@ class WebSocketManager {
       this.wsConnection.on("message", handler);
 
       try {
-        this.wsConnection.send(JSON.stringify({
-          id,
-          type: "call_service",
-          domain,
-          service,
-          service_data: serviceData,
-        }));
+        this.wsConnection.send(JSON.stringify(request));
       } catch (e) {
         this.wsConnection.off("message", handler);
+        console.error(`[WS-LOG] callService ERRORE invio: ${e.message}`);
         resolve({ success: false, error: e.message });
         return;
       }
@@ -541,6 +558,7 @@ class WebSocketManager {
         if (settled) return;
         settled = true;
         this.wsConnection.off("message", handler);
+        console.error(`[WS-LOG] callService TIMEOUT per id=${id}, domain=${domain}, service=${service}`);
         resolve({ success: false, error: "timeout" });
       }, 5000);
     });

@@ -38,6 +38,7 @@ const defaultSettings = {
   gateSettings: {
     intercomSensorId: "",
     gateLockId: "",
+    intercomCameraId: "",
   },
 };
 

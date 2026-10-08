@@ -65,6 +65,7 @@ let ipcHandlers;
 let isWebSocketConnected = false;
 let isSystemLocked = false;
 let isAlarmTriggered = false;
+let intercomNotification = null;
 let gotTheLock;
 const isAutoStart = process.argv.includes("--autostart");
 
@@ -223,6 +224,15 @@ function setupEventCallbacks() {
     onIntercomEvent: () => {
       showIntercomDialog();
     },
+    onGateLockOpened: () => {
+      if (intercomNotification) {
+        intercomNotification.close();
+        intercomNotification = null;
+      }
+      if (intercomWindowManager && intercomWindowManager.isDialogOpen()) {
+        intercomWindowManager.closeIntercomWindow();
+      }
+    },
   });
 
   trayManager.setEventCallbacks({
@@ -237,32 +247,75 @@ function setupEventCallbacks() {
 
 // Mostra il popup del citofono con pulsante per aprire il cancello.
 // Il popup si chiude automaticamente dopo 2 minuti (config: appConfig.intercom.autoCloseMs)
-function showIntercomDialog() {
+// Se configurata una telecamera citofono, il suo flusso viene mostrato come sfondo della card.
+async function showIntercomDialog() {
   const settings = settingsManager.getSettings();
   const gateSettings = settings.gateSettings || {};
   if (!gateSettings.intercomSensorId) return;
 
   if (!gateSettings.gateLockId) {
-    new Notification({
+    const notification = new Notification({
       title: appConfig.app.name,
       body: "Qualcuno al cancello (citofono)",
       silent: false,
-    }).show();
+    });
+    notification.on("close", () => {
+      if (intercomNotification === notification) {
+        intercomNotification = null;
+      }
+    });
+    intercomNotification = notification;
+    notification.show();
     return;
   }
 
-  intercomWindowManager.showDialog();
+  let cameraStream = null;
+  if (gateSettings.intercomCameraId) {
+    cameraStream = await resolveIntercomCameraStream(gateSettings.intercomCameraId);
+  }
+
+  intercomWindowManager.showDialog(cameraStream);
+}
+
+// Risolve l'URL dello stream della telecamera citofono (HLS se abilitato, altrimenti MJPEG)
+async function resolveIntercomCameraStream(cameraId) {
+  try {
+    const settings = settingsManager.getSettings();
+    if (!settings.homeAssistantUrl || !settings.homeAssistantToken || !websocketManager) {
+      return null;
+    }
+    const useHLS = settings.streamingSettings?.useHLS || false;
+    const result = await websocketManager.getCameraUrlWithToken(
+      cameraId,
+      settings.homeAssistantUrl,
+      settings.homeAssistantToken,
+      useHLS
+    );
+    if (!result || !result.url) return null;
+    return {
+      url: result.url,
+      streamType: result.streamType || "mjpeg",
+      mjpegUrl: result.mjpegUrl || null,
+      cameraName: result.friendlyName || null,
+    };
+  } catch (error) {
+    console.error("Errore nel recupero dello stream citofono:", error);
+    return null;
+  }
 }
 
 // Apre il cancello tramite il servizio lock.open di Home Assistant
 async function openGate() {
   const settings = settingsManager.getSettings();
   const gateLockId = settings.gateSettings?.gateLockId;
+  console.log(`[GATE-LOG] openGate chiamato: gateLockId=${gateLockId}, ws connesso=${isWebSocketConnected}`);
   if (!gateLockId || !websocketManager) return;
 
-  const result = await websocketManager.callService("lock", "open", { entity_id: gateLockId });
+  const result = await websocketManager.callService("lock", "unlock", { entity_id: gateLockId });
   if (!result.success) {
     console.error("Apertura cancello fallito:", result.error);
+  } else {
+    console.log(`[GATE-LOG] openGate success=${result.success}, result=${JSON.stringify(result.result)}`);
   }
 }
 
@@ -277,6 +330,7 @@ if (!gotTheLock) {
   // Esegui il codice solo se abbiamo il lock dell'istanza singola
   app.whenReady().then(() => {
     try {
+ 
       // Ascolta per eventi di seconda istanza
       app.on('second-instance', (event, commandLine, workingDirectory) => {
         if (mainWindow) {

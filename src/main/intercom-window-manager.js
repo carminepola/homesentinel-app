@@ -7,6 +7,7 @@ class IntercomWindowManager {
     this.settingsManager = settingsManager;
     this.intercomWindow = null;
     this.autoCloseTimeout = null;
+    this.pendingCameraStream = null;
     this.onOpenGate = null;
 
     this.setupIpcHandlers();
@@ -31,13 +32,18 @@ class IntercomWindowManager {
     return appConfig.intercom?.autoCloseMs || 120000;
   }
 
-  showDialog() {
+  showDialog(cameraStream = null) {
+    this.pendingCameraStream = cameraStream;
+
     // Se il popup è già aperto, riportalo in primo piano e riavvia il timer
     if (this.intercomWindow && !this.intercomWindow.isDestroyed()) {
       this.startAutoCloseTimer();
       this.intercomWindow.webContents.send("intercom-reset-timer", {
         durationMs: this.getAutoCloseMs(),
       });
+      if (this.pendingCameraStream) {
+        this.intercomWindow.webContents.send("intercom-camera", this.pendingCameraStream);
+      }
       this.intercomWindow.show();
       this.intercomWindow.focus();
       return;
@@ -77,11 +83,15 @@ class IntercomWindowManager {
         this.intercomWindow.webContents.send("intercom-init", {
           durationMs: this.getAutoCloseMs(),
         });
+        if (this.pendingCameraStream) {
+          this.intercomWindow.webContents.send("intercom-camera", this.pendingCameraStream);
+        }
         this.startAutoCloseTimer();
       });
 
       this.intercomWindow.on("closed", () => {
         this.intercomWindow = null;
+        this.pendingCameraStream = null;
         this.clearAutoCloseTimer();
       });
     } catch (error) {

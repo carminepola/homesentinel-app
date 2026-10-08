@@ -119,6 +119,8 @@ function setupEventListeners() {
   if (intercomSensor) intercomSensor.value = appSettings.gateSettings?.intercomSensorId || "";
   const gateLock = document.getElementById("gate-lock");
   if (gateLock) gateLock.value = appSettings.gateSettings?.gateLockId || "";
+  const intercomCamera = document.getElementById("intercom-camera");
+  if (intercomCamera) intercomCamera.value = appSettings.gateSettings?.intercomCameraId || "";
     });
   }
 
@@ -454,6 +456,7 @@ async function saveSettings() {
     gateSettings: {
       intercomSensorId: document.getElementById("intercom-sensor")?.value || "",
       gateLockId: document.getElementById("gate-lock")?.value || "",
+      intercomCameraId: document.getElementById("intercom-camera")?.value || "",
     },
     sensorCameraMappings: appSettings.sensorCameraMappings || [],
   };
@@ -625,6 +628,18 @@ function updateDeviceSelects() {
       gateLockSelect.appendChild(option);
     });
   }
+
+  const intercomCameraSelect = document.getElementById("intercom-camera");
+  if (intercomCameraSelect) {
+    intercomCameraSelect.innerHTML = '<option value="">-- Nessuna telecamera --</option>';
+
+    (homeAssistantDevices.cameras || []).forEach((camera) => {
+      const option = document.createElement("option");
+      option.value = camera.entity_id;
+      option.textContent = camera.attributes.friendly_name || camera.entity_id;
+      intercomCameraSelect.appendChild(option);
+    });
+  }
 }
 
 function restoreAlarmSensorValue() {
@@ -642,6 +657,10 @@ function restoreGateValues() {
   const gateLockSelect = document.getElementById("gate-lock");
   if (gateLockSelect && appSettings.gateSettings?.gateLockId) {
     gateLockSelect.value = appSettings.gateSettings.gateLockId;
+  }
+  const intercomCameraSelect = document.getElementById("intercom-camera");
+  if (intercomCameraSelect && appSettings.gateSettings?.intercomCameraId) {
+    intercomCameraSelect.value = appSettings.gateSettings.intercomCameraId;
   }
 }
 
