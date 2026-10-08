@@ -878,28 +878,9 @@ async function checkForUpdates() {
         </div>`;
 
       const dlBtn = document.getElementById("open-downloads-btn");
-      if (dlBtn && result.assets && result.assets.length > 0) {
-        dlBtn.addEventListener("click", async () => {
-          const platform = process.platform;
-          let assetUrl = "";
-          if (platform === "win32") {
-            assetUrl = result.assets.find((a) => a.name.endsWith(".exe"))?.url || "";
-          } else if (platform === "linux") {
-            const installationType = await ipcRenderer.invoke("get-installation-type");
-            
-            if (installationType === "RPM") {
-              assetUrl = result.assets.find((a) => a.name.endsWith(".rpm"))?.url || "";
-            } else if (installationType === "DEB") {
-              assetUrl = result.assets.find((a) => a.name.endsWith(".deb"))?.url || "";
-            } else {
-              assetUrl = result.assets.find((a) => a.name.endsWith(".AppImage"))?.url || "";
-            }
-          }
-          if (assetUrl) {
-            ipcRenderer.invoke("open-release-page", assetUrl);
-          } else if (result.releaseUrl) {
-            ipcRenderer.invoke("open-release-page", result.releaseUrl);
-          }
+      if (dlBtn) {
+        dlBtn.addEventListener("click", () => {
+          ipcRenderer.invoke("open-release-page", "https://git.devmin.it/carmine/homesentinel-app/releases/");
         });
       }
       if (btn) btn.textContent = "Verifica Aggiornamenti";
