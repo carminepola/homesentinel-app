@@ -9,9 +9,13 @@
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   overflow: hidden;
-  background: #12161f;
+  background: transparent;
   color: #fff;
   user-select: none;
+}
+
+:root {
+  --intercom-radius: 18px;
 }
 
 /* Sfondo telecamera citofono */
@@ -20,6 +24,7 @@ body {
   inset: 0;
   z-index: 0;
   overflow: hidden;
+  border-radius: var(--intercom-radius);
 }
 
 .intercom-camera-bg video,
@@ -51,6 +56,8 @@ body.has-camera .intercom-dialog {
   height: 100vh;
   padding: 1.5rem;
   background: radial-gradient(ellipse at center, #1b2230 0%, #12161f 70%);
+  border-radius: var(--intercom-radius);
+  overflow: hidden;
   animation: intercomIn 0.25s ease-out;
 }
 

@@ -79,6 +79,7 @@ const appConfig = {
       contextIsolation: false,
     },
     frame: false,
+    transparent: true,
     resizable: false,
     maximizable: false,
     fullscreenable: false,

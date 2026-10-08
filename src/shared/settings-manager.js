@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { defaultSettings } = require("../../config/default-settings");
+const { encryptToken, decryptToken, isTokenEncrypted, isEncryptionAvailable } = require("../main/token-encryption");
 
 class SettingsManager {
   constructor(app) {
@@ -23,6 +24,16 @@ class SettingsManager {
         console.log("Impostazioni caricate da:", this.settingsPath);
         // Unisci con le impostazioni predefinite per garantire che tutti i campi esistano
         this.currentSettings = { ...defaultSettings, ...settings };
+        // Il token resta in chiaro solo in memoria: decifra quanto letto da disco
+        this.currentSettings.homeAssistantToken = decryptToken(this.currentSettings.homeAssistantToken);
+        // Migrazione: cifra su disco un token salvato in chiaro da una versione precedente
+        if (
+          this.currentSettings.homeAssistantToken &&
+          !isTokenEncrypted(this.currentSettings.homeAssistantToken) &&
+          isEncryptionAvailable()
+        ) {
+          this.saveSettingsToFile();
+        }
         return this.currentSettings;
       }
     } catch (error) {
@@ -34,10 +45,11 @@ class SettingsManager {
     return this.currentSettings;
   }
 
-  // Salva le impostazioni su file
+  // Salva le impostazioni su file (il token viene cifrato prima della scrittura)
   saveSettingsToFile(settings = null) {
     try {
-      const settingsToSave = settings || this.currentSettings;
+      const settingsToSave = { ...(settings || this.currentSettings) };
+      settingsToSave.homeAssistantToken = encryptToken(settingsToSave.homeAssistantToken);
       fs.writeFileSync(this.settingsPath, JSON.stringify(settingsToSave, null, 2), "utf8");
       console.log("Impostazioni salvate in:", this.settingsPath);
       return true;
@@ -83,8 +95,10 @@ class SettingsManager {
 
       // Unisci con le impostazioni predefinite per garantire compatibilità
       this.currentSettings = { ...defaultSettings, ...importedSettings };
+      // Il token importato può essere in chiaro (esportazione) o cifrato: normalizza in chiaro in memoria
+      this.currentSettings.homeAssistantToken = decryptToken(this.currentSettings.homeAssistantToken);
 
-      // Salva le nuove impostazioni
+      // Salva le nuove impostazioni (il token viene cifrato su disco)
       const saved = this.saveSettingsToFile();
       if (!saved) {
         throw new Error("Impossibile salvare le impostazioni importate");
