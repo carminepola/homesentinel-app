@@ -52,7 +52,7 @@ class AlarmWindowManager {
     const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().bounds;
 
     try {
-      this.alarmWindow = new BrowserWindow({
+      const alarmWindow = new BrowserWindow({
         width: screenWidth,
         height: screenHeight,
         x: 0,
@@ -69,17 +69,19 @@ class AlarmWindowManager {
           webSecurity: false,
         },
       });
+      this.alarmWindow = alarmWindow;
 
-      this.alarmWindow.setVisibleOnAllWorkspaces(true);
-      this.alarmWindow.setAlwaysOnTop(true, "screen-saver");
+      alarmWindow.setVisibleOnAllWorkspaces(true);
+      alarmWindow.setAlwaysOnTop(true, "screen-saver");
 
-      this.alarmWindow.loadFile(path.join(__dirname, "..", "..", "alarm.html"));
+      alarmWindow.loadFile(path.join(__dirname, "..", "..", "alarm.html"));
 
-      this.alarmWindow.once("ready-to-show", () => {
-        this.alarmWindow.show();
-        this.alarmWindow.focus();
+      alarmWindow.once("ready-to-show", () => {
+        if (alarmWindow.isDestroyed()) return;
+        alarmWindow.show();
+        alarmWindow.focus();
 
-        this.alarmWindow.webContents.send("alarm-init", {
+        alarmWindow.webContents.send("alarm-init", {
           sensorName: alarmData.sensorName || "Allarme",
           state: alarmData.state || "triggered",
           startTime: this.alarmStartTime,
@@ -88,11 +90,13 @@ class AlarmWindowManager {
         this.loadAlarmCameras();
       });
 
-      this.alarmWindow.on("closed", () => {
-        this.alarmWindow = null;
+      alarmWindow.on("closed", () => {
+        if (this.alarmWindow === alarmWindow) {
+          this.alarmWindow = null;
+        }
       });
 
-      this.alarmWindow.webContents.on("before-input-event", (event, input) => {
+      alarmWindow.webContents.on("before-input-event", (event, input) => {
         if (input.key === "Escape") {
           event.preventDefault();
         }
@@ -116,12 +120,14 @@ class AlarmWindowManager {
 
     const globalUseHLS = settings.streamingSettings?.useHLS || false;
     const loadedCameras = new Set();
-
-    for (const mapping of mappings) {
-      if (!mapping.cameraId) continue;
-      if (loadedCameras.has(mapping.cameraId)) continue;
+    const uniqueMappings = mappings.filter((mapping) => {
+      if (!mapping.cameraId || loadedCameras.has(mapping.cameraId)) return false;
       loadedCameras.add(mapping.cameraId);
+      return true;
+    });
 
+    // Le telecamere vengono risolte in parallelo: ognuna appare appena pronta
+    await Promise.all(uniqueMappings.map(async (mapping) => {
       try {
         let cameraUrl = null;
         let cameraName = null;
@@ -167,7 +173,7 @@ class AlarmWindowManager {
       } catch (error) {
         console.error(`Errore nel caricamento della telecamera ${mapping.cameraId}:`, error);
       }
-    }
+    }));
   }
 
   async dismissAlarm(newState) {

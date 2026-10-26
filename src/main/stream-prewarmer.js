@@ -1,15 +1,21 @@
 const appConfig = require("../shared/app-config");
 
+// Il pre-warmer fa due cose:
+// - tiene in cache gli URL (con token) delle telecamere, così il PiP si apre senza attendere Home Assistant;
+// - per gli stream HLS interroga periodicamente la playlist, così Home Assistant non chiude lo stream
+//   e il PiP non deve aspettare l'avvio (connessione RTSP + keyframe).
+// Per MJPEG non c'è nulla da tenere caldo: ogni apertura crea comunque una nuova connessione.
+// Mentre lo schermo è bloccato o è attivo il Non disturbare nessun PiP può aprirsi, quindi si mette in pausa.
 class StreamPreWarmer {
   constructor(settingsManager, websocketManager) {
     this.settingsManager = settingsManager;
     this.websocketManager = websocketManager;
     this.urlCache = new Map();
     this.tokenRefreshTimer = null;
-    this.keepAliveControllers = new Map();
+    this.keepAlives = new Map();
+    this.pauseReasons = new Set();
     this.isRunning = false;
     this.cacheMaxAge = 300000;
-    this.activeCameraUrls = new Map();
   }
 
   getIntervalMs() {
@@ -23,14 +29,22 @@ class StreamPreWarmer {
     return settings.preWarmerSettings?.enabled ?? true;
   }
 
+  isPaused() {
+    return this.pauseReasons.size > 0;
+  }
+
   start() {
     if (this.isRunning) return;
     if (!this.isEnabled()) {
       console.log("StreamPreWarmer: disabilitato dalle impostazioni");
       return;
     }
+    if (this.isPaused()) {
+      console.log(`StreamPreWarmer: in pausa (${[...this.pauseReasons].join(", ")})`);
+      return;
+    }
     this.isRunning = true;
-    console.log(`StreamPreWarmer: avviato (refresh token ogni ${this.getIntervalMs() / 1000}s, keep-alive persistente)`);
+    console.log(`StreamPreWarmer: avviato (refresh URL ogni ${this.getIntervalMs() / 1000}s, keep-alive solo per HLS)`);
     this.refreshAllTokens();
     this.scheduleNextTokenRefresh();
   }
@@ -44,13 +58,13 @@ class StreamPreWarmer {
         this.refreshAllTokens();
         this.scheduleNextTokenRefresh();
       } else {
-        this.isRunning = false;
-        console.log("StreamPreWarmer: fermato (disabilitato)");
+        this.stop();
       }
     }, this.getIntervalMs());
   }
 
   stop() {
+    const wasRunning = this.isRunning;
     this.isRunning = false;
     if (this.tokenRefreshTimer) {
       clearTimeout(this.tokenRefreshTimer);
@@ -58,13 +72,33 @@ class StreamPreWarmer {
     }
     this.stopAllKeepAlives();
     this.urlCache.clear();
-    this.activeCameraUrls.clear();
-    console.log("StreamPreWarmer: fermato");
+    if (wasRunning) {
+      console.log("StreamPreWarmer: fermato");
+    }
   }
 
   restart() {
     this.stop();
     this.start();
+  }
+
+  // Mette in pausa (o riprende) il pre-warmer per un motivo specifico, es. "locked" o "dnd".
+  // Riprende solo quando non resta nessun motivo di pausa.
+  setPaused(reason, paused) {
+    const wasPaused = this.isPaused();
+    if (paused) {
+      this.pauseReasons.add(reason);
+    } else {
+      this.pauseReasons.delete(reason);
+    }
+
+    if (!wasPaused && this.isPaused()) {
+      console.log(`StreamPreWarmer: pausa (${reason})`);
+      this.stop();
+    } else if (wasPaused && !this.isPaused()) {
+      console.log(`StreamPreWarmer: ripresa (${reason})`);
+      this.start();
+    }
   }
 
   async refreshAllTokens() {
@@ -76,51 +110,43 @@ class StreamPreWarmer {
 
     const mappings = settings.sensorCameraMappings || [];
     const customCameras = settings.customCameras || [];
-    const seenIds = new Set();
-
-    const cameraIds = [];
-    for (const mapping of mappings) {
-      if (mapping.cameraId && !seenIds.has(mapping.cameraId)) {
-        seenIds.add(mapping.cameraId);
-        cameraIds.push(mapping.cameraId);
-      }
-    }
+    const cameraIds = [...new Set(mappings.map((m) => m.cameraId).filter(Boolean))];
 
     this.pruneRemovedCameras(cameraIds);
 
     if (cameraIds.length === 0) return;
 
-    console.log(`StreamPreWarmer: refresh token per ${cameraIds.length} camera...`);
-
-    for (const cameraId of cameraIds) {
+    await Promise.all(cameraIds.map(async (cameraId) => {
       try {
         await this.refreshCamera(cameraId, settings, customCameras);
       } catch (err) {
         console.warn(`StreamPreWarmer: refresh fallito per ${cameraId}: ${err.message}`);
       }
-    }
+    }));
   }
 
   pruneRemovedCameras(currentCameraIds) {
     const currentSet = new Set(currentCameraIds);
-    for (const [cameraId, oldUrl] of this.activeCameraUrls.entries()) {
+    for (const cameraId of [...this.urlCache.keys(), ...this.keepAlives.keys()]) {
       if (!currentSet.has(cameraId)) {
         this.stopKeepAlive(cameraId);
-        this.activeCameraUrls.delete(cameraId);
         this.urlCache.delete(cameraId);
-        console.log(`StreamPreWarmer: rimossa camera ${cameraId} (non più mappata)`);
       }
     }
   }
 
-  async refreshCamera(cameraId, settings, customCameras) {
-    const isCustom = cameraId.startsWith("custom_");
+  resolveCustomStreamType(customCamera, settings) {
+    const streamType = customCamera.streamType || "auto";
+    if (streamType !== "auto") return streamType;
+    return settings.streamingSettings?.useHLS ? "hls" : "mjpeg";
+  }
 
+  async refreshCamera(cameraId, settings, customCameras) {
     let newUrl;
     let streamType;
     let friendlyName;
 
-    if (isCustom) {
+    if (cameraId.startsWith("custom_")) {
       const customCamera = customCameras.find(c => c.id === cameraId);
       if (!customCamera || !customCamera.url) return;
       newUrl = customCamera.url;
@@ -140,6 +166,9 @@ class StreamPreWarmer {
       friendlyName = result.friendlyName;
     }
 
+    // Il refresh può terminare dopo una pausa: non riattivare nulla
+    if (!this.isRunning) return;
+
     this.urlCache.set(cameraId, {
       url: newUrl,
       streamType,
@@ -147,101 +176,64 @@ class StreamPreWarmer {
       timestamp: Date.now(),
     });
 
-    const oldUrl = this.activeCameraUrls.get(cameraId);
-    if (oldUrl !== newUrl) {
-      if (oldUrl) {
-        this.stopKeepAlive(cameraId);
-      }
-      this.activeCameraUrls.set(cameraId, newUrl);
+    if (streamType === "hls") {
       this.startKeepAlive(cameraId, newUrl);
+    } else {
+      this.stopKeepAlive(cameraId);
     }
   }
 
+  // Interroga la playlist HLS a intervalli regolari: basta perché Home Assistant
+  // consideri lo stream in uso, senza scaricare i segmenti video
   startKeepAlive(cameraId, url) {
-    this.stopKeepAlive(cameraId);
-
-    const controller = new AbortController();
-    this.keepAliveControllers.set(cameraId, controller);
-
-    console.log(`StreamPreWarmer: keep-alive avviato per ${cameraId}`);
-    this.keepAliveLoop(cameraId, url, controller);
-  }
-
-  async keepAliveLoop(cameraId, url, controller) {
-    try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-      });
-
-      if (!response.ok && response.status !== 206) {
-        console.warn(`StreamPreWarmer: keep-alive HTTP ${response.status} per ${cameraId}, retry tra 5s`);
-        this.scheduleKeepAliveRetry(cameraId, url, controller, 5000);
-        return;
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        this.scheduleKeepAliveRetry(cameraId, url, controller, 5000);
-        return;
-      }
-
-      let totalBytes = 0;
-      let lastLog = Date.now();
-
-      while (!controller.signal.aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        totalBytes += value.length;
-
-        const now = Date.now();
-        if (now - lastLog > 60000) {
-          console.log(`StreamPreWarmer: ${cameraId} keep-alive attivo (${Math.round(totalBytes / 1024)}KB)`);
-          lastLog = now;
-        }
-      }
-
-      if (!controller.signal.aborted) {
-        console.log(`StreamPreWarmer: keep-alive stream terminato per ${cameraId}, riconnessione tra 3s`);
-        this.scheduleKeepAliveRetry(cameraId, url, controller, 3000);
-      }
-    } catch (err) {
-      if (err.name === "AbortError") return;
-
-      console.warn(`StreamPreWarmer: keep-alive errore per ${cameraId}: ${err.message}, retry tra 5s`);
-      if (!controller.signal.aborted) {
-        this.scheduleKeepAliveRetry(cameraId, url, controller, 5000);
-      }
+    const existing = this.keepAlives.get(cameraId);
+    if (existing) {
+      existing.url = url;
+      return;
     }
-  }
 
-  scheduleKeepAliveRetry(cameraId, url, controller, delayMs) {
-    if (controller.signal.aborted) return;
-    if (!this.activeCameraUrls.has(cameraId)) return;
+    const keepAlive = { url, timer: null, controller: null };
+    this.keepAlives.set(cameraId, keepAlive);
 
-    setTimeout(() => {
-      if (!controller.signal.aborted && this.activeCameraUrls.has(cameraId)) {
-        const currentUrl = this.activeCameraUrls.get(cameraId);
-        this.keepAliveLoop(cameraId, currentUrl, controller);
+    const poll = async () => {
+      if (this.keepAlives.get(cameraId) !== keepAlive) return;
+      keepAlive.controller = new AbortController();
+      try {
+        const response = await fetch(keepAlive.url, {
+          signal: AbortSignal.any([
+            keepAlive.controller.signal,
+            AbortSignal.timeout(appConfig.preWarmer.requestTimeout),
+          ]),
+        });
+        await response.arrayBuffer();
+        if (!response.ok) {
+          console.warn(`StreamPreWarmer: keep-alive HLS HTTP ${response.status} per ${cameraId}`);
+        }
+      } catch (err) {
+        if (keepAlive.controller.signal.aborted) return;
+        console.warn(`StreamPreWarmer: keep-alive HLS fallito per ${cameraId}: ${err.message}`);
       }
-    }, delayMs);
+      if (this.keepAlives.get(cameraId) === keepAlive) {
+        keepAlive.timer = setTimeout(poll, appConfig.preWarmer.hlsKeepAliveInterval);
+      }
+    };
+
+    console.log(`StreamPreWarmer: keep-alive HLS avviato per ${cameraId}`);
+    poll();
   }
 
   stopKeepAlive(cameraId) {
-    const controller = this.keepAliveControllers.get(cameraId);
-    if (controller) {
-      controller.abort();
-      this.keepAliveControllers.delete(cameraId);
-    }
+    const keepAlive = this.keepAlives.get(cameraId);
+    if (!keepAlive) return;
+    this.keepAlives.delete(cameraId);
+    clearTimeout(keepAlive.timer);
+    if (keepAlive.controller) keepAlive.controller.abort();
   }
 
   stopAllKeepAlives() {
-    for (const controller of this.keepAliveControllers.values()) {
-      try {
-        controller.abort();
-      } catch (e) {}
+    for (const cameraId of [...this.keepAlives.keys()]) {
+      this.stopKeepAlive(cameraId);
     }
-    this.keepAliveControllers.clear();
   }
 
   getCachedUrl(cameraId) {
@@ -271,7 +263,7 @@ class StreamPreWarmer {
         cameraId,
         age: Date.now() - cached.timestamp,
         streamType: cached.streamType,
-        keepAliveActive: this.keepAliveControllers.has(cameraId),
+        keepAliveActive: this.keepAlives.has(cameraId),
       });
     }
     return stats;

@@ -4,11 +4,19 @@ const { marked } = require("marked");
 // Importa i moduli
 const ThemeManager = require("./src/renderer/theme-manager");
 const MappingManager = require("./src/renderer/mapping-manager");
-const appConfig = require("./src/shared/app-config");
+const { getAlarmStateLabel } = require("./src/shared/alarm-states");
 
 // Stato dell'applicazione
 let appSettings = {};
-let homeAssistantDevices = { sensors: [], cameras: [] };
+let homeAssistantDevices = { sensors: [], cameras: [], locks: [] };
+let isConnected = false;
+let lastSensorStatus = [];
+let recentEvents = [];
+let editingCustomCameraId = null;
+
+// Modifiche non salvate nel form impostazioni (letto anche dal processo principale all'uscita)
+let settingsBaseline = null;
+window.hasUnsavedChanges = false;
 
 // Gestori
 let themeManager;
@@ -19,406 +27,362 @@ const connectionStatus = document.getElementById("connection-status");
 const connectionText = document.getElementById("connection-text");
 const dndToggle = document.getElementById("dnd-toggle");
 const dndStatus = document.getElementById("dnd-status");
-const darkModeToggle = document.getElementById("dark-mode-toggle");
+
+const $ = (id) => document.getElementById(id);
 
 // Inizializzazione
 document.addEventListener("DOMContentLoaded", async () => {
-  // Inizializza i gestori
   themeManager = new ThemeManager();
 
-  // Carica le impostazioni
   appSettings = await ipcRenderer.invoke("get-settings");
 
-  // Inizializza il gestore delle mappature dopo aver caricato i dispositivi
+  // Il gestore delle mappature viene creato una sola volta: ricrearlo duplicherebbe i listener
   mappingManager = new MappingManager(appSettings, homeAssistantDevices);
 
-  // Imposta i valori iniziali
   updateUIFromSettings();
-
-  // Carica lo stato dell'avvio automatico
-  await loadAutoStartStatus();
-
-  // Carica la versione dell'app
-  await loadAppVersion();
-
-  // Carica i dispositivi Home Assistant se configurato
-  if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
-    await loadHomeAssistantDevices();
-    // Reinizializza il gestore delle mappature con i dispositivi caricati
-    mappingManager = new MappingManager(appSettings, homeAssistantDevices);
-  }
-
-  // Aggiorna lo stato dei sensori
-  updateSensorStatus();
-
-  // Imposta gli event listener rimanenti
   setupEventListeners();
+  resetSettingsBaseline();
+  updateDashboard();
+
+  // Stato reale della connessione WebSocket (l'evento potrebbe essere arrivato prima del caricamento)
+  ipcRenderer.invoke("get-connection-status").then(updateConnectionStatus).catch(() => {});
+  ipcRenderer.invoke("get-recent-events").then((events) => {
+    recentEvents = events || [];
+    renderEvents();
+  }).catch(() => {});
+
+  // Operazioni indipendenti in parallelo per un avvio più rapido
+  const tasks = [loadAutoStartStatus(), loadAppVersion()];
+  if (isHomeAssistantConfigured()) {
+    tasks.push(loadHomeAssistantDevices());
+  }
+  await Promise.all(tasks);
+
+  updateSensorStatus();
 });
+
+function isHomeAssistantConfigured() {
+  return !!(appSettings.homeAssistantUrl && appSettings.homeAssistantToken);
+}
+
+function switchTab(tabName) {
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-tab") === tabName);
+  });
+  document.querySelectorAll(".tab-pane").forEach((pane) => {
+    pane.classList.toggle("active", pane.id === tabName);
+  });
+  updateSaveBar();
+}
 
 // Imposta gli event listener
 function setupEventListeners() {
-  // Event listener per il toggle DND
   if (dndToggle) {
     dndToggle.addEventListener("change", async () => {
       const dndMode = dndToggle.checked;
-      if (dndStatus) {
-        dndStatus.textContent = dndMode ? "Attivato" : "Disattivato";
-      }
+      updateDndDisplay(dndMode);
       try {
         await ipcRenderer.invoke("set-dnd-mode", dndMode);
       } catch (error) {
         console.error("Errore nell'impostazione della modalità DND:", error);
-        dndToggle.checked = !dndMode;
-        if (dndStatus) {
-          dndStatus.textContent = !dndMode ? "Attivato" : "Disattivato";
-        }
+        updateDndDisplay(!dndMode);
       }
     });
   }
 
-  // Event listener per il toggle modalità scura
-  if (darkModeToggle && themeManager) {
-    darkModeToggle.addEventListener("change", () => {
-      const newTheme = darkModeToggle.checked ? "dark" : "light";
-      themeManager.setTheme(newTheme);
-    });
-  }
-
-  // Event listener per il toggle avvio automatico
-  const autoStartToggle = document.getElementById("auto-start-toggle");
+  // L'avvio automatico viene applicato subito (non fa parte del form da salvare)
+  const autoStartToggle = $("auto-start-toggle");
   if (autoStartToggle) {
     autoStartToggle.addEventListener("change", async () => {
       const enabled = autoStartToggle.checked;
       try {
         const result = await ipcRenderer.invoke("set-auto-start", enabled);
         if (!result.success) {
-          console.error("Errore nell'impostazione dell'avvio automatico:", result.error);
           autoStartToggle.checked = !enabled;
-          alert(`Impossibile ${enabled ? "attivare" : "disattivare"} l'avvio automatico: ${result.error}`);
+          showNotification(`Impossibile ${enabled ? "attivare" : "disattivare"} l'avvio automatico: ${result.error || "errore sconosciuto"}`, "error");
+          return;
         }
+        appSettings.autoStart = enabled;
+        showNotification(enabled ? "Avvio automatico attivato" : "Avvio automatico disattivato", "success");
       } catch (error) {
-        console.error("Errore nell'impostazione dell'avvio automatico:", error);
         autoStartToggle.checked = !enabled;
-        alert(`Errore nell'impostazione dell'avvio automatico: ${error.message}`);
+        showNotification(`Errore nell'impostazione dell'avvio automatico: ${error.message}`, "error");
       }
     });
   }
 
-  // Event listener per il toggle allarme
-  const alarmEnabledToggle = document.getElementById("alarm-enabled");
+  const alarmEnabledToggle = $("alarm-enabled");
   if (alarmEnabledToggle) {
     alarmEnabledToggle.addEventListener("change", () => {
-      const fields = document.getElementById("alarm-config-fields");
-      if (fields) {
-        fields.style.display = alarmEnabledToggle.checked ? "block" : "none";
-      }
-  refreshAlarmState();
-
-  // Citofono / Cancello
-  const intercomSensor = document.getElementById("intercom-sensor");
-  if (intercomSensor) intercomSensor.value = appSettings.gateSettings?.intercomSensorId || "";
-  const gateLock = document.getElementById("gate-lock");
-  if (gateLock) gateLock.value = appSettings.gateSettings?.gateLockId || "";
-  const intercomCamera = document.getElementById("intercom-camera");
-  if (intercomCamera) intercomCamera.value = appSettings.gateSettings?.intercomCameraId || "";
+      $("alarm-config-fields").style.display = alarmEnabledToggle.checked ? "" : "none";
+      refreshAlarmState();
     });
   }
 
-  // Event listener per il toggle pianificazione DnD
-  const dndScheduleEnabled = document.getElementById("dnd-schedule-enabled");
+  const dndScheduleEnabled = $("dnd-schedule-enabled");
   if (dndScheduleEnabled) {
     dndScheduleEnabled.addEventListener("change", () => {
-      const fields = document.getElementById("dnd-schedule-fields");
-      if (fields) fields.style.display = dndScheduleEnabled.checked ? "block" : "none";
+      $("dnd-schedule-fields").style.display = dndScheduleEnabled.checked ? "" : "none";
     });
   }
 
-  // Event listener per il toggle PIN allarme
-  const alarmPinEnabled = document.getElementById("alarm-pin-enabled");
+  const alarmPinEnabled = $("alarm-pin-enabled");
   if (alarmPinEnabled) {
     alarmPinEnabled.addEventListener("change", () => {
-      const pinGroup = document.getElementById("alarm-pin-group");
-      if (pinGroup) {
-        pinGroup.style.display = alarmPinEnabled.checked ? "block" : "none";
-      }
+      $("alarm-pin-group").style.display = alarmPinEnabled.checked ? "" : "none";
     });
   }
 
-  // Event listener per il cambio delle dimensioni predefinite
-  const defaultSizeSelect = document.getElementById("default-size");
-  if (defaultSizeSelect) {
-    defaultSizeSelect.addEventListener("change", () => {
-      toggleCustomSizeFields("default-size", "custom-size-container");
-    });
-  }
+  $("default-size")?.addEventListener("change", () => toggleCustomSizeFields("default-size", "custom-size-container"));
 
-  // Event listener per il cambio delle dimensioni di test
-  const testSizeSelect = document.getElementById("test-size");
-  if (testSizeSelect) {
-    testSizeSelect.addEventListener("change", () => {
-      toggleCustomSizeFields("test-size", "test-custom-size-container");
-    });
-  }
+  // Navigazione tra le sezioni delle impostazioni
+  document.querySelectorAll(".settings-nav-btn").forEach((button) => {
+    button.addEventListener("click", () => switchSettingsSection(button.getAttribute("data-section")));
+  });
 
-  // Event listener per il cambio delle dimensioni di mappatura
-  const mappingSizeSelect = document.getElementById("mapping-size");
-  if (mappingSizeSelect) {
-    mappingSizeSelect.addEventListener("change", () => {
-      toggleCustomSizeFields("mapping-size", "mapping-custom-size-container");
+  document.querySelectorAll("#position-picker .corner").forEach((corner) => {
+    corner.addEventListener("click", () => {
+      setPipPosition(corner.getAttribute("data-value"));
+      $("pip-position").dispatchEvent(new Event("change", { bubbles: true }));
     });
-  }
+  });
 
-  // Event listener per il salvataggio delle impostazioni
-  const saveSettingsBtn = document.getElementById("save-settings-btn");
-  if (saveSettingsBtn) {
-    saveSettingsBtn.addEventListener("click", async () => {
-      await saveSettings();
+  $("prewarmer-enabled")?.addEventListener("change", updatePrewarmerRow);
+
+  ["dnd-schedule-start", "dnd-schedule-end"].forEach((id) => {
+    $(id)?.addEventListener("input", updateDndTimeline);
+  });
+  document.querySelectorAll(".day-presets [data-days]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const selected = button.getAttribute("data-days").split(",");
+      document.querySelectorAll("#dnd-schedule-days input[type='checkbox']").forEach((input) => {
+        input.checked = selected.includes(input.getAttribute("data-day"));
+      });
+      updateDndTimeline();
+      updateSaveBar();
     });
-  }
+  });
+  document.querySelectorAll("#dnd-schedule-days input[type='checkbox']").forEach((input) => {
+    input.addEventListener("change", updateDndTimeline);
+  });
+  $("test-size")?.addEventListener("change", () => toggleCustomSizeFields("test-size", "test-custom-size-container"));
 
-  // Event listener per il test di connessione
-  const testConnectionBtn = document.getElementById("test-connection-btn");
-  if (testConnectionBtn) {
-    testConnectionBtn.addEventListener("click", async () => {
-      await testConnection();
-    });
-  }
+  // Rilevamento modifiche nel form impostazioni
+  const settingsPane = $("settings");
+  const onSettingsEdit = (event) => {
+    if (event.target.id === "auto-start-toggle") return;
+    updateSaveBar();
+  };
+  settingsPane.addEventListener("input", onSettingsEdit);
+  settingsPane.addEventListener("change", onSettingsEdit);
 
-  // Event listener per il test PiP
-  const testPipBtn = document.getElementById("test-pip-btn");
-  if (testPipBtn) {
-    testPipBtn.addEventListener("click", async () => {
-      await testPiP();
-    });
-  }
+  $("save-settings-btn")?.addEventListener("click", saveSettings);
+  $("discard-settings-btn")?.addEventListener("click", discardSettingsChanges);
+  $("test-connection-btn")?.addEventListener("click", testConnection);
+  $("test-pip-btn")?.addEventListener("click", testPiP);
+  $("export-settings-btn")?.addEventListener("click", exportSettings);
+  $("import-settings-btn")?.addEventListener("click", importSettings);
+  $("reset-settings-btn")?.addEventListener("click", resetSettings);
+  $("hide-btn")?.addEventListener("click", () => ipcRenderer.invoke("hide-window"));
+  // La conferma per modifiche non salvate è gestita dal processo principale
+  $("quit-btn")?.addEventListener("click", () => ipcRenderer.invoke("quit-app"));
+  $("test-alarm-btn")?.addEventListener("click", () => ipcRenderer.invoke("test-alarm"));
 
-  // Event listener per l'esportazione delle impostazioni
-  const exportSettingsBtn = document.getElementById("export-settings-btn");
-  if (exportSettingsBtn) {
-    exportSettingsBtn.addEventListener("click", async () => {
-      await exportSettings();
-    });
-  }
-
-  // Event listener per l'importazione delle impostazioni
-  const importSettingsBtn = document.getElementById("import-settings-btn");
-  if (importSettingsBtn) {
-    importSettingsBtn.addEventListener("click", async () => {
-      await importSettings();
-    });
-  }
-
-  // Event listener per il reset delle impostazioni
-  const resetSettingsBtn = document.getElementById("reset-settings-btn");
-  if (resetSettingsBtn) {
-    resetSettingsBtn.addEventListener("click", async () => {
-      await resetSettings();
-    });
-  }
-
-  const hideBtn = document.getElementById("hide-btn");
-  if (hideBtn) {
-    hideBtn.addEventListener("click", async () => {
-      await ipcRenderer.invoke("hide-window");
-    });
-  }
-
-  // Event listener per il pulsante Esci
-  const quitBtn = document.getElementById("quit-btn");
-  if (quitBtn) {
-    quitBtn.addEventListener("click", async () => {
-      await ipcRenderer.invoke("quit-app");
-    });
-  }
-
-  // Event listener per il test allarme
-  const testAlarmBtn = document.getElementById("test-alarm-btn");
-  if (testAlarmBtn) {
-    testAlarmBtn.addEventListener("click", async () => {
-      await ipcRenderer.invoke("test-alarm");
-    });
-  }
-
-  const checkUpdateBtn = document.getElementById("check-update-btn");
+  const checkUpdateBtn = $("check-update-btn");
   if (checkUpdateBtn) {
     checkUpdateBtn.addEventListener("click", async () => {
-      checkUpdateBtn.textContent = "Verifica...";
+      checkUpdateBtn.textContent = "Verifica in corso...";
       checkUpdateBtn.disabled = true;
       await checkForUpdates();
+      checkUpdateBtn.textContent = "Verifica aggiornamenti";
       checkUpdateBtn.disabled = false;
     });
   }
 
-  // Funzione per mostrare/nascondere i campi personalizzati
-  function toggleCustomSizeFields(selectId, containerId) {
-    const select = document.getElementById(selectId);
-    const container = document.getElementById(containerId);
-    
-    if (select && container) {
-      if (select.value === "custom") {
-        container.style.display = "block";
-      } else {
-        container.style.display = "none";
-      }
-    }
-  }
+  // Dashboard
+  $("onboarding-start-btn")?.addEventListener("click", () => {
+    switchTab("settings");
+    switchSettingsSection("connection");
+    $("ha-url")?.focus();
+  });
+  $("quick-open-gate-btn")?.addEventListener("click", openGateFromDashboard);
+  $("quick-add-mapping-btn")?.addEventListener("click", () => {
+    switchTab("sensors");
+    mappingManager.openMappingModal();
+  });
+  $("quick-test-btn")?.addEventListener("click", () => switchTab("test"));
 
-  // Menu hamburger
-  const menuToggleBtn = document.getElementById("menu-toggle-btn");
-  const mobileMenu = document.getElementById("mobile-menu");
+  // Telecamere personalizzate
+  $("add-custom-camera-btn")?.addEventListener("click", () => openCustomCameraModal());
+  $("save-custom-camera-btn")?.addEventListener("click", saveCustomCamera);
+  $("cancel-custom-camera-btn")?.addEventListener("click", closeCustomCameraModal);
+  $("close-custom-camera-modal")?.addEventListener("click", closeCustomCameraModal);
 
-  if (menuToggleBtn && mobileMenu) {
-    menuToggleBtn.addEventListener("click", () => {
-      mobileMenu.classList.toggle("open");
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!mobileMenu.contains(e.target) && !menuToggleBtn.contains(e.target)) {
-        mobileMenu.classList.remove("open");
-      }
-    });
-  }
+  // Esc chiude le finestre modali
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if ($("custom-camera-modal").classList.contains("show")) closeCustomCameraModal();
+    if ($("mapping-modal").classList.contains("show")) mappingManager.closeMappingModal();
+  });
 
   // Gestione tab
-  const tabButtons = document.querySelectorAll(".tab-btn");
-  const tabPanes = document.querySelectorAll(".tab-pane");
-
-  tabButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const tabName = button.getAttribute("data-tab");
-
-      tabButtons.forEach((btn) => btn.classList.remove("active"));
-      tabPanes.forEach((pane) => pane.classList.remove("active"));
-
-      button.classList.add("active");
-      document.getElementById(tabName).classList.add("active");
-
-      if (mobileMenu) {
-        mobileMenu.classList.remove("open");
-      }
-    });
+  document.querySelectorAll(".tab-btn").forEach((button) => {
+    button.addEventListener("click", () => switchTab(button.getAttribute("data-tab")));
   });
+
+  // Aggiorna i tempi relativi degli eventi
+  setInterval(renderEvents, 30000);
+}
+
+function toggleCustomSizeFields(selectId, containerId) {
+  const select = $(selectId);
+  const container = $(containerId);
+  if (select && container) {
+    container.style.display = select.value === "custom" ? "" : "none";
+  }
+}
+
+// Assicura che una select contenga l'opzione salvata, anche se Home Assistant non l'ha (ancora)
+// restituita: così salvare le impostazioni offline non cancella la configurazione esistente
+function ensureSelectValue(select, value) {
+  if (!select) return;
+  if (value && !Array.from(select.options).some((o) => o.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = `${value} (non trovato)`;
+    select.appendChild(option);
+  }
+  select.value = value || "";
+}
+
+function switchSettingsSection(section) {
+  document.querySelectorAll(".settings-nav-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-section") === section);
+  });
+  document.querySelectorAll(".settings-section").forEach((pane) => {
+    pane.classList.toggle("active", pane.getAttribute("data-section") === section);
+  });
+  document.querySelector("main").scrollTop = 0;
+}
+
+function setPipPosition(position) {
+  $("pip-position").value = position;
+  document.querySelectorAll("#position-picker .corner").forEach((corner) => {
+    const active = corner.getAttribute("data-value") === position;
+    corner.classList.toggle("active", active);
+    corner.setAttribute("aria-checked", active ? "true" : "false");
+  });
+}
+
+function updatePrewarmerRow() {
+  $("prewarmer-interval-row").classList.toggle("disabled", !$("prewarmer-enabled").checked);
+}
+
+const parseTime = (value) => {
+  const [h, m] = (value || "00:00").split(":").map((n) => parseInt(n, 10) || 0);
+  return h * 60 + m;
+};
+
+// Disegna la fascia oraria di Non disturbare sulla timeline delle 24 ore e la descrive a parole
+function updateDndTimeline() {
+  const track = $("dnd-timeline-track");
+  if (!track) return;
+  const startValue = $("dnd-schedule-start").value || "00:00";
+  const endValue = $("dnd-schedule-end").value || "00:00";
+  const start = parseTime(startValue);
+  const end = parseTime(endValue);
+  const day = 24 * 60;
+
+  const segments = start === end ? [] : start < end ? [[start, end]] : [[start, day], [0, end]];
+  track.replaceChildren(...segments.map(([from, to]) => {
+    const segment = document.createElement("div");
+    segment.className = "day-timeline-segment";
+    segment.style.left = `${(from / day) * 100}%`;
+    segment.style.width = `${((to - from) / day) * 100}%`;
+    return segment;
+  }));
+
+  let description;
+  if (start === end) {
+    description = "Scegli orari diversi per attivare la pianificazione.";
+  } else if (start > end) {
+    description = `Dalle ${startValue} fino alle ${endValue} del giorno dopo.`;
+  } else {
+    description = `Dalle ${startValue} alle ${endValue}.`;
+  }
+  $("dnd-schedule-description").textContent = description;
 }
 
 // Funzioni per le impostazioni
 function updateUIFromSettings() {
-  // Home Assistant settings
-  const haUrl = document.getElementById("ha-url");
-  if (haUrl) haUrl.value = appSettings.homeAssistantUrl || "";
+  $("ha-url").value = appSettings.homeAssistantUrl || "";
+  $("ha-token").value = appSettings.homeAssistantToken || "";
 
-  const haToken = document.getElementById("ha-token");
-  if (haToken) haToken.value = appSettings.homeAssistantToken || "";
+  const pip = appSettings.pipSettings || {};
+  $("pip-duration").value = pip.defaultDuration || 10;
+  setPipPosition(pip.position || "top-right");
+  $("default-size").value = pip.size || "medium";
+  $("custom-width").value = pip.width || 320;
+  $("custom-height").value = pip.height || 240;
+  toggleCustomSizeFields("default-size", "custom-size-container");
 
-  // PiP settings
-  const pipDuration = document.getElementById("pip-duration");
-  if (pipDuration) pipDuration.value = appSettings.pipSettings?.defaultDuration || 10;
+  const margins = pip.margins || {};
+  $("margin-top").value = margins.top ?? 20;
+  $("margin-right").value = margins.right ?? 20;
+  $("margin-bottom").value = margins.bottom ?? 20;
+  $("margin-left").value = margins.left ?? 20;
 
-  const pipPosition = document.getElementById("pip-position");
-  if (pipPosition) pipPosition.value = appSettings.pipSettings?.position || "top-right";
+  $("auto-start-toggle").checked = appSettings.autoStart || false;
+  $("use-hls").checked = appSettings.streamingSettings?.useHLS || false;
+  $("prewarmer-enabled").checked = appSettings.preWarmerSettings?.enabled ?? true;
+  $("prewarmer-interval").value = appSettings.preWarmerSettings?.intervalSeconds || 30;
+  updatePrewarmerRow();
 
-
-  const defaultSize = document.getElementById("default-size");
-  if (defaultSize) defaultSize.value = appSettings.pipSettings?.size || "medium";
-
-  // Margin settings
-  const marginTop = document.getElementById("margin-top");
-  if (marginTop) marginTop.value = appSettings.pipSettings?.margins?.top || 40;
-
-  const marginRight = document.getElementById("margin-right");
-  if (marginRight) marginRight.value = appSettings.pipSettings?.margins?.right || 20;
-
-  const marginBottom = document.getElementById("margin-bottom");
-  if (marginBottom) marginBottom.value = appSettings.pipSettings?.margins?.bottom || 20;
-
-  const marginLeft = document.getElementById("margin-left");
-  if (marginLeft) marginLeft.value = appSettings.pipSettings?.margins?.left || 20;
-
-  // Auto start
-  const autoStart = document.getElementById("auto-start-toggle");
-  if (autoStart) autoStart.checked = appSettings.autoStart || false;
-
-  // HLS streaming
-  const useHls = document.getElementById("use-hls");
-  if (useHls) useHls.checked = appSettings.streamingSettings?.useHLS || false;
-
-  // PreWarmer settings
-  const prewarmerEnabled = document.getElementById("prewarmer-enabled");
-  if (prewarmerEnabled) prewarmerEnabled.checked = appSettings.preWarmerSettings?.enabled ?? true;
-
-  const prewarmerInterval = document.getElementById("prewarmer-interval");
-  if (prewarmerInterval) prewarmerInterval.value = appSettings.preWarmerSettings?.intervalSeconds || 30;
-
-  // Alarm settings
-  const alarmEnabled = document.getElementById("alarm-enabled");
-  if (alarmEnabled) alarmEnabled.checked = appSettings.alarmSettings?.enabled || false;
-
-  const alarmSensor = document.getElementById("alarm-sensor");
-  if (alarmSensor) alarmSensor.value = appSettings.alarmSettings?.sensorId || "";
-
-  const alarmConfigFields = document.getElementById("alarm-config-fields");
-  if (alarmConfigFields) {
-    alarmConfigFields.style.display = appSettings.alarmSettings?.enabled ? "block" : "none";
-  }
-
-  const alarmPinEnabled = document.getElementById("alarm-pin-enabled");
-  if (alarmPinEnabled) alarmPinEnabled.checked = appSettings.alarmSettings?.pinEnabled || false;
-
-  const alarmPin = document.getElementById("alarm-pin");
-  if (alarmPin) alarmPin.value = appSettings.alarmSettings?.pin || "";
-
-  const alarmPinGroup = document.getElementById("alarm-pin-group");
-  if (alarmPinGroup) {
-    alarmPinGroup.style.display = appSettings.alarmSettings?.pinEnabled ? "block" : "none";
-  }
-
+  const alarm = appSettings.alarmSettings || {};
+  $("alarm-enabled").checked = alarm.enabled || false;
+  ensureSelectValue($("alarm-sensor"), alarm.sensorId);
+  $("alarm-config-fields").style.display = alarm.enabled ? "" : "none";
+  $("alarm-pin-enabled").checked = alarm.pinEnabled || false;
+  $("alarm-pin").value = alarm.pin || "";
+  $("alarm-pin-group").style.display = alarm.pinEnabled ? "" : "none";
   refreshAlarmState();
 
-  // Dark mode
-  if (darkModeToggle && themeManager) {
-    darkModeToggle.checked = themeManager.getCurrentTheme() === "dark";
-  }
+  restoreGateValues();
 
-  // DND mode
-  if (dndToggle) {
-    dndToggle.checked = appSettings.dndMode || false;
-  }
-  if (dndStatus) {
-    dndStatus.textContent = appSettings.dndMode ? "Attivato" : "Disattivato";
-  }
+  updateDndDisplay(appSettings.dndMode || false);
 
-  // Pianificazione DnD
   const dndSchedule = appSettings.dndSchedule || {};
-  const schedEnabled = document.getElementById("dnd-schedule-enabled");
-  const schedStart = document.getElementById("dnd-schedule-start");
-  const schedEnd = document.getElementById("dnd-schedule-end");
-  const schedFields = document.getElementById("dnd-schedule-fields");
-  if (schedEnabled) schedEnabled.checked = !!dndSchedule.enabled;
-  if (schedStart) schedStart.value = dndSchedule.startTime || "18:00";
-  if (schedEnd) schedEnd.value = dndSchedule.endTime || "09:00";
-  if (schedFields) schedFields.style.display = dndSchedule.enabled ? "block" : "none";
+  $("dnd-schedule-enabled").checked = !!dndSchedule.enabled;
+  $("dnd-schedule-start").value = dndSchedule.startTime || "18:00";
+  $("dnd-schedule-end").value = dndSchedule.endTime || "09:00";
+  $("dnd-schedule-fields").style.display = dndSchedule.enabled ? "" : "none";
   const days = dndSchedule.days || [false, false, false, false, false, false, false];
   document.querySelectorAll("#dnd-schedule-days input[type='checkbox']").forEach((input) => {
-    const idx = parseInt(input.getAttribute("data-day"), 10);
-    input.checked = !!days[idx];
+    input.checked = !!days[parseInt(input.getAttribute("data-day"), 10)];
   });
+  updateDndTimeline();
 
-  // Update sensor mappings list
+  updateCameraSelects();
+  renderCustomCameras();
   if (mappingManager) {
     mappingManager.updateSensorMappingsList();
   }
 }
 
-async function saveSettings() {
-  // Collect all settings
-  const newSettings = {
-    homeAssistantUrl: document.getElementById("ha-url")?.value || "",
-    homeAssistantToken: document.getElementById("ha-token")?.value || "",
-    autoStart: document.getElementById("auto-start-toggle")?.checked || false,
-    dndMode: appSettings.dndMode || false,
+const readInt = (id, fallback) => {
+  const value = parseInt($(id)?.value, 10);
+  return Number.isNaN(value) ? fallback : value;
+};
+
+// Legge le impostazioni dal form (senza i campi gestiti altrove: mappature, telecamere, DnD, avvio automatico)
+function collectSettingsFromForm() {
+  return {
+    homeAssistantUrl: ($("ha-url").value || "").trim().replace(/\/+$/, ""),
+    homeAssistantToken: ($("ha-token").value || "").trim(),
     dndSchedule: {
-      enabled: document.getElementById("dnd-schedule-enabled")?.checked || false,
-      startTime: document.getElementById("dnd-schedule-start")?.value || "18:00",
-      endTime: document.getElementById("dnd-schedule-end")?.value || "09:00",
+      enabled: $("dnd-schedule-enabled").checked,
+      startTime: $("dnd-schedule-start").value || "18:00",
+      endTime: $("dnd-schedule-end").value || "09:00",
       days: (() => {
         const arr = [false, false, false, false, false, false, false];
         document.querySelectorAll("#dnd-schedule-days input[type='checkbox']").forEach((input) => {
@@ -429,50 +393,133 @@ async function saveSettings() {
       })(),
     },
     pipSettings: {
-      defaultDuration: parseInt(document.getElementById("pip-duration")?.value || 10),
-      position: document.getElementById("pip-position")?.value || "top-right",
-      multiEventMode: "cascade", // Always use cascade mode
-      size: document.getElementById("default-size")?.value || "medium",
+      defaultDuration: readInt("pip-duration", 10),
+      position: $("pip-position").value || "top-right",
+      size: $("default-size").value || "medium",
+      width: readInt("custom-width", 320),
+      height: readInt("custom-height", 240),
       margins: {
-        top: parseInt(document.getElementById("margin-top")?.value || 20),
-        right: parseInt(document.getElementById("margin-right")?.value || 20),
-        bottom: parseInt(document.getElementById("margin-bottom")?.value || 20),
-        left: parseInt(document.getElementById("margin-left")?.value || 20),
+        top: readInt("margin-top", 20),
+        right: readInt("margin-right", 20),
+        bottom: readInt("margin-bottom", 20),
+        left: readInt("margin-left", 20),
       },
     },
     streamingSettings: {
-      useHLS: document.getElementById("use-hls")?.checked || false,
+      useHLS: $("use-hls").checked,
     },
     preWarmerSettings: {
-      enabled: document.getElementById("prewarmer-enabled")?.checked ?? true,
-      intervalSeconds: parseInt(document.getElementById("prewarmer-interval")?.value || 30),
+      enabled: $("prewarmer-enabled").checked,
+      intervalSeconds: readInt("prewarmer-interval", 30),
     },
     alarmSettings: {
-      enabled: document.getElementById("alarm-enabled")?.checked || false,
-      sensorId: document.getElementById("alarm-sensor")?.value || "",
-      pinEnabled: document.getElementById("alarm-pin-enabled")?.checked || false,
-      pin: document.getElementById("alarm-pin")?.value || "",
+      enabled: $("alarm-enabled").checked,
+      sensorId: $("alarm-sensor").value || "",
+      pinEnabled: $("alarm-pin-enabled").checked,
+      pin: $("alarm-pin").value || "",
     },
     gateSettings: {
-      intercomSensorId: document.getElementById("intercom-sensor")?.value || "",
-      gateLockId: document.getElementById("gate-lock")?.value || "",
-      intercomCameraId: document.getElementById("intercom-camera")?.value || "",
+      intercomSensorId: $("intercom-sensor").value || "",
+      gateLockId: $("gate-lock").value || "",
+      intercomCameraId: $("intercom-camera").value || "",
     },
-    sensorCameraMappings: appSettings.sensorCameraMappings || [],
   };
+}
+
+// Sezione delle impostazioni in cui si trova ciascun gruppo di valori
+const SETTINGS_SECTION_OF = {
+  homeAssistantUrl: "connection",
+  homeAssistantToken: "connection",
+  streamingSettings: "connection",
+  preWarmerSettings: "connection",
+  pipSettings: "pip",
+  alarmSettings: "alarm",
+  gateSettings: "alarm",
+  dndSchedule: "dnd",
+};
+
+function resetSettingsBaseline() {
+  settingsBaseline = JSON.stringify(collectSettingsFromForm());
+  updateSaveBar();
+}
+
+function updateSaveBar() {
+  const dirty = settingsBaseline !== null && JSON.stringify(collectSettingsFromForm()) !== settingsBaseline;
+  window.hasUnsavedChanges = dirty;
+  const settingsVisible = $("settings").classList.contains("active");
+  $("save-bar").classList.toggle("visible", dirty && settingsVisible);
+  // Segnala le modifiche in sospeso anche sul tab e sulle sezioni coinvolte
+  document.querySelector('.tab-btn[data-tab="settings"]').textContent = dirty ? "Impostazioni •" : "Impostazioni";
+  const current = collectSettingsFromForm();
+  const baseline = settingsBaseline ? JSON.parse(settingsBaseline) : current;
+  const changedKeys = Object.keys(current).filter((key) => JSON.stringify(current[key]) !== JSON.stringify(baseline[key]));
+  document.querySelectorAll(".settings-nav-btn").forEach((btn) => {
+    const section = btn.getAttribute("data-section");
+    btn.classList.toggle("dirty", changedKeys.some((key) => SETTINGS_SECTION_OF[key] === section));
+  });
+}
+
+function discardSettingsChanges() {
+  updateUIFromSettings();
+  resetSettingsBaseline();
+  showNotification("Modifiche annullate", "info");
+}
+
+// Ritorna { message, section } del primo errore, oppure null
+function validateSettings(settings) {
+  const error = (message, section) => ({ message, section });
+  if (settings.homeAssistantUrl && !/^https?:\/\/[^\s]+$/i.test(settings.homeAssistantUrl)) {
+    return error("L'indirizzo di Home Assistant deve iniziare con http:// o https://", "connection");
+  }
+  const interval = settings.preWarmerSettings.intervalSeconds;
+  if (interval < 10 || interval > 300) {
+    return error("L'intervallo di pre-riscaldamento deve essere tra 10 e 300 secondi", "connection");
+  }
+  const pip = settings.pipSettings;
+  if (pip.defaultDuration < 1 || pip.defaultDuration > 60) {
+    return error("La durata predefinita deve essere tra 1 e 60 secondi", "pip");
+  }
+  if (pip.size === "custom" && (pip.width < 100 || pip.width > 1920 || pip.height < 100 || pip.height > 1080)) {
+    return error("Dimensioni personalizzate non valide. Larghezza: 100-1920px, altezza: 100-1080px", "pip");
+  }
+  if (Object.values(pip.margins).some((m) => m < 0 || m > 200)) {
+    return error("I margini devono essere tra 0 e 200 pixel", "pip");
+  }
+  if (settings.alarmSettings.enabled && !settings.alarmSettings.sensorId) {
+    return error("Seleziona l'antifurto oppure disattiva l'allarme", "alarm");
+  }
+  if (settings.alarmSettings.pinEnabled && !/^\d{4,6}$/.test(settings.alarmSettings.pin)) {
+    return error("Il PIN dell'allarme deve avere da 4 a 6 cifre", "alarm");
+  }
+  if (settings.dndSchedule.enabled && settings.dndSchedule.startTime === settings.dndSchedule.endTime) {
+    return error("Scegli orari diversi per la pianificazione di Non disturbare", "dnd");
+  }
+  return null;
+}
+
+async function saveSettings() {
+  const formSettings = collectSettingsFromForm();
+  const validationError = validateSettings(formSettings);
+  if (validationError) {
+    switchSettingsSection(validationError.section);
+    showNotification(validationError.message, "error");
+    return;
+  }
+
+  const haChanged = formSettings.homeAssistantUrl !== appSettings.homeAssistantUrl ||
+    formSettings.homeAssistantToken !== appSettings.homeAssistantToken;
+  const newSettings = { ...appSettings, ...formSettings };
 
   try {
     await ipcRenderer.invoke("save-settings", newSettings);
     appSettings = newSettings;
+    mappingManager.setAppSettings(appSettings);
+    resetSettingsBaseline();
+    updateDashboard();
+    showNotification("Impostazioni salvate", "success");
 
-    // Show success message
-    showNotification("Impostazioni salvate con successo", "success");
-
-    // Reload devices if Home Assistant settings changed
-    if (newSettings.homeAssistantUrl && newSettings.homeAssistantToken) {
+    if (haChanged && isHomeAssistantConfigured()) {
       await loadHomeAssistantDevices();
-      // Reinizializza il gestore delle mappature con i dispositivi aggiornati
-      mappingManager = new MappingManager(appSettings, homeAssistantDevices);
     }
   } catch (error) {
     showNotification("Errore nel salvataggio delle impostazioni: " + error.message, "error");
@@ -480,46 +527,57 @@ async function saveSettings() {
 }
 
 async function testConnection() {
-  const url = document.getElementById("ha-url")?.value;
-  const token = document.getElementById("ha-token")?.value;
+  const url = ($("ha-url").value || "").trim().replace(/\/+$/, "");
+  const token = ($("ha-token").value || "").trim();
 
   if (!url || !token) {
     showNotification("Inserisci URL e token di Home Assistant", "error");
     return;
   }
 
+  const button = $("test-connection-btn");
+  button.disabled = true;
+  button.textContent = "Verifica in corso...";
   try {
     const response = await fetch(`${url}/api/`, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (response.ok) {
-      showNotification("Connessione a Home Assistant riuscita", "success");
-      updateConnectionStatus(true);
+      const hint = window.hasUnsavedChanges ? ": ora premi Salva" : "";
+      showNotification(`Connessione riuscita${hint}`, "success");
+    } else if (response.status === 401) {
+      throw new Error("token non valido");
     } else {
-      throw new Error("Credenziali non valide");
+      throw new Error(`risposta HTTP ${response.status}`);
     }
   } catch (error) {
-    showNotification("Errore di connessione: " + error.message, "error");
-    updateConnectionStatus(false);
+    const message = error.name === "TimeoutError" ? "Home Assistant non risponde" : error.message;
+    showNotification("Connessione fallita: " + message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Test connessione";
   }
 }
 
-function updateConnectionStatus(isConnected) {
+function updateConnectionStatus(connected) {
+  isConnected = !!connected;
   if (connectionStatus && connectionText) {
-    if (isConnected) {
-      connectionStatus.classList.remove("offline");
-      connectionStatus.classList.add("online");
-      connectionText.textContent = "Connesso";
-    } else {
-      connectionStatus.classList.remove("online");
-      connectionStatus.classList.add("offline");
-      connectionText.textContent = "Non connesso";
-    }
+    connectionStatus.classList.toggle("online", isConnected);
+    connectionStatus.classList.toggle("offline", !isConnected);
+    connectionText.textContent = isConnected ? "Connesso" : (isHomeAssistantConfigured() ? "Connessione in corso..." : "Non configurato");
   }
+  let host = "";
+  try {
+    host = appSettings.homeAssistantUrl ? new URL(appSettings.homeAssistantUrl).host : "";
+  } catch (error) {
+    host = appSettings.homeAssistantUrl;
+  }
+  $("connection-detail").textContent = host;
 }
 
 // Funzioni per i dispositivi Home Assistant
@@ -528,235 +586,413 @@ async function loadHomeAssistantDevices() {
     const devices = await ipcRenderer.invoke("get-home-assistant-devices");
 
     if (devices.error) {
-      showNotification("Errore nel caricamento dei dispositivi: " + devices.error, "error");
+      showNotification("Impossibile caricare i dispositivi: " + devices.error, "error");
       return;
     }
 
+    const wasDirty = window.hasUnsavedChanges;
     homeAssistantDevices = devices;
     updateDeviceSelects();
-    restoreAlarmSensorValue();
-    restoreGateValues();
-    updateConnectionStatus(true);
-
-    // Aggiorna i dispositivi nel MappingManager
-    if (mappingManager) {
-      mappingManager.updateHomeAssistantDevices(homeAssistantDevices);
-    }
+    mappingManager.updateHomeAssistantDevices(homeAssistantDevices);
+    // Le select ora contengono le opzioni reali: aggiorna il riferimento se l'utente non aveva modificato nulla
+    if (!wasDirty) resetSettingsBaseline();
+    updateDashboard();
   } catch (error) {
-    showNotification("Errore nel caricamento dei dispositivi: " + error.message, "error");
-    updateConnectionStatus(false);
+    showNotification("Impossibile caricare i dispositivi: " + error.message, "error");
   }
+}
+
+function fillSelect(select, placeholder, entities, keepValue) {
+  if (!select) return;
+  const value = keepValue !== undefined ? keepValue : select.value;
+  select.innerHTML = "";
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = placeholder;
+  select.appendChild(empty);
+  entities.forEach((entity) => {
+    const option = document.createElement("option");
+    option.value = entity.entity_id;
+    option.textContent = entity.attributes?.friendly_name || entity.entity_id;
+    select.appendChild(option);
+  });
+  ensureSelectValue(select, value);
 }
 
 function updateDeviceSelects() {
-  // Update sensor selects
-  const sensorSelect = document.getElementById("sensor-select");
-  const testCameraSelect = document.getElementById("test-camera");
-  const cameraSelect = document.getElementById("camera-select");
-
-  if (sensorSelect) {
-    // Clear existing options
-    sensorSelect.innerHTML = '<option value="">-- Seleziona un sensore --</option>';
-
-    // Add sensor options
-    homeAssistantDevices.sensors.forEach((sensor) => {
-      const option = document.createElement("option");
-      option.value = sensor.entity_id;
-      option.textContent = sensor.attributes.friendly_name || sensor.entity_id;
-      sensorSelect.appendChild(option);
-    });
-  }
-
-  if (testCameraSelect) {
-    testCameraSelect.innerHTML = '<option value="">-- Seleziona una telecamera --</option>';
-
-    homeAssistantDevices.cameras.forEach((camera) => {
-      const option = document.createElement("option");
-      option.value = camera.entity_id;
-      option.textContent = camera.attributes.friendly_name || camera.entity_id;
-      testCameraSelect.appendChild(option);
-    });
-  }
-
-  if (cameraSelect) {
-    cameraSelect.innerHTML = '<option value="">-- Seleziona una telecamera --</option>';
-
-    homeAssistantDevices.cameras.forEach((camera) => {
-      const option = document.createElement("option");
-      option.value = camera.entity_id;
-      option.textContent = camera.attributes.friendly_name || camera.entity_id;
-      cameraSelect.appendChild(option);
-    });
-  }
-
-  const alarmSensorSelect = document.getElementById("alarm-sensor");
-  if (alarmSensorSelect) {
-    alarmSensorSelect.innerHTML = '<option value="">-- Seleziona un sensore --</option>';
-
-    homeAssistantDevices.sensors.forEach((sensor) => {
-      if (sensor.entity_id.startsWith("alarm_control_panel.")) {
-        const option = document.createElement("option");
-        option.value = sensor.entity_id;
-        option.textContent = sensor.attributes.friendly_name || sensor.entity_id;
-        alarmSensorSelect.appendChild(option);
-      }
-    });
-  }
-
-  const intercomSelect = document.getElementById("intercom-sensor");
-  if (intercomSelect) {
-    intercomSelect.innerHTML = '<option value="">-- Seleziona un sensore --</option>';
-
-    homeAssistantDevices.sensors.forEach((sensor) => {
-      if (sensor.entity_id.startsWith("binary_sensor.") || sensor.entity_id.startsWith("input_boolean.")) {
-        const option = document.createElement("option");
-        option.value = sensor.entity_id;
-        option.textContent = sensor.attributes.friendly_name || sensor.entity_id;
-        intercomSelect.appendChild(option);
-      }
-    });
-  }
-
-  const gateLockSelect = document.getElementById("gate-lock");
-  if (gateLockSelect) {
-    gateLockSelect.innerHTML = '<option value="">-- Seleziona una entita\' lock --</option>';
-
-    (homeAssistantDevices.locks || []).forEach((lock) => {
-      const option = document.createElement("option");
-      option.value = lock.entity_id;
-      option.textContent = lock.attributes.friendly_name || lock.entity_id;
-      gateLockSelect.appendChild(option);
-    });
-  }
-
-  const intercomCameraSelect = document.getElementById("intercom-camera");
-  if (intercomCameraSelect) {
-    intercomCameraSelect.innerHTML = '<option value="">-- Nessuna telecamera --</option>';
-
-    (homeAssistantDevices.cameras || []).forEach((camera) => {
-      const option = document.createElement("option");
-      option.value = camera.entity_id;
-      option.textContent = camera.attributes.friendly_name || camera.entity_id;
-      intercomCameraSelect.appendChild(option);
-    });
-  }
+  const sensors = homeAssistantDevices.sensors || [];
+  fillSelect($("sensor-select"), "-- Seleziona un sensore --", sensors);
+  fillSelect($("alarm-sensor"), "-- Seleziona un antifurto --",
+    sensors.filter((s) => s.entity_id.startsWith("alarm_control_panel.")),
+    appSettings.alarmSettings?.sensorId || $("alarm-sensor").value);
+  fillSelect($("intercom-sensor"), "-- Seleziona un sensore --",
+    sensors.filter((s) => s.entity_id.startsWith("binary_sensor.") || s.entity_id.startsWith("input_boolean.")),
+    $("intercom-sensor").value || appSettings.gateSettings?.intercomSensorId);
+  fillSelect($("gate-lock"), "-- Seleziona un'entità lock --", homeAssistantDevices.locks || [],
+    $("gate-lock").value || appSettings.gateSettings?.gateLockId);
+  fillSelect($("intercom-camera"), "-- Nessuna telecamera --", homeAssistantDevices.cameras || [],
+    $("intercom-camera").value || appSettings.gateSettings?.intercomCameraId);
+  updateCameraSelects();
 }
 
-function restoreAlarmSensorValue() {
-  const alarmSensorSelect = document.getElementById("alarm-sensor");
-  if (alarmSensorSelect && appSettings.alarmSettings?.sensorId) {
-    alarmSensorSelect.value = appSettings.alarmSettings.sensorId;
-  }
+// Select delle telecamere: quelle di Home Assistant più quelle personalizzate
+function updateCameraSelects() {
+  const groups = [
+    { label: "Home Assistant", items: (homeAssistantDevices.cameras || []).map((c) => ({ value: c.entity_id, text: c.attributes?.friendly_name || c.entity_id })) },
+    { label: "Personalizzate", items: (appSettings.customCameras || []).map((c) => ({ value: c.id, text: c.name || c.url })) },
+  ];
+
+  ["camera-select", "test-camera"].forEach((id) => {
+    const select = $(id);
+    if (!select) return;
+    const value = select.value;
+    select.innerHTML = '<option value="">-- Seleziona una telecamera --</option>';
+    groups.forEach((group) => {
+      if (group.items.length === 0) return;
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.label;
+      group.items.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.value;
+        option.textContent = item.text;
+        optgroup.appendChild(option);
+      });
+      select.appendChild(optgroup);
+    });
+    if (Array.from(select.options).some((o) => o.value === value)) {
+      select.value = value;
+    }
+  });
 }
 
 function restoreGateValues() {
-  const intercomSelect = document.getElementById("intercom-sensor");
-  if (intercomSelect && appSettings.gateSettings?.intercomSensorId) {
-    intercomSelect.value = appSettings.gateSettings.intercomSensorId;
-  }
-  const gateLockSelect = document.getElementById("gate-lock");
-  if (gateLockSelect && appSettings.gateSettings?.gateLockId) {
-    gateLockSelect.value = appSettings.gateSettings.gateLockId;
-  }
-  const intercomCameraSelect = document.getElementById("intercom-camera");
-  if (intercomCameraSelect && appSettings.gateSettings?.intercomCameraId) {
-    intercomCameraSelect.value = appSettings.gateSettings.intercomCameraId;
-  }
+  const gate = appSettings.gateSettings || {};
+  ensureSelectValue($("intercom-sensor"), gate.intercomSensorId);
+  ensureSelectValue($("gate-lock"), gate.gateLockId);
+  ensureSelectValue($("intercom-camera"), gate.intercomCameraId);
 }
 
-// Funzioni per lo stato dei sensori
+// Stato dei sensori
+const SENSOR_STATE_LABELS = {
+  on: { text: "Attivo", cls: "on" },
+  off: { text: "Inattivo", cls: "off" },
+  unavailable: { text: "Non disponibile", cls: "unknown" },
+  unknown: { text: "Sconosciuto", cls: "unknown" },
+};
+
 async function updateSensorStatus() {
   try {
     const sensorStatus = await ipcRenderer.invoke("get-sensor-status");
-    const statusList = document.getElementById("sensor-status-list");
+    lastSensorStatus = sensorStatus || [];
+    updateDashboard();
 
+    const statusList = $("sensor-status-list");
     if (!statusList) return;
 
-    if (!sensorStatus || sensorStatus.length === 0) {
-      statusList.innerHTML = "<p>Nessun sensore monitorato</p>";
+    if (lastSensorStatus.length === 0) {
+      statusList.innerHTML = '<p class="empty-state">Nessun sensore monitorato</p>';
       return;
     }
 
-    statusList.innerHTML = "";
-
-    sensorStatus.forEach((status) => {
+    const fragment = document.createDocumentFragment();
+    lastSensorStatus.forEach((status) => {
       const statusElement = document.createElement("div");
       statusElement.className = "sensor-status-item";
 
-      const sensorName = getSensorName(status.sensorId);
-      const statusClass = status.status === "on" ? "on" : status.status === "off" ? "off" : "unknown";
-      const statusText = status.status === "on" ? "ON" : status.status === "off" ? "OFF" : "Sconosciuto";
-
-      statusElement.innerHTML = `
-        <span class="sensor-status-name">${sensorName}</span>
-        <span class="sensor-status-value ${statusClass}">${statusText}</span>
-      `;
-
-      statusList.appendChild(statusElement);
+      const label = SENSOR_STATE_LABELS[status.status] || { text: status.status, cls: "unknown" };
+      const nameEl = document.createElement("span");
+      nameEl.className = "sensor-status-name";
+      nameEl.textContent = getSensorName(status.sensorId);
+      const valueEl = document.createElement("span");
+      valueEl.className = `sensor-status-value ${label.cls}`;
+      valueEl.textContent = label.text;
+      statusElement.append(nameEl, valueEl);
+      fragment.appendChild(statusElement);
     });
+
+    statusList.replaceChildren(fragment);
   } catch (error) {
     console.error("Errore nell'aggiornamento dello stato dei sensori:", error);
   }
 }
 
 function getSensorName(sensorId) {
-  const sensor = homeAssistantDevices.sensors.find((s) => s.entity_id === sensorId);
+  const sensor = (homeAssistantDevices.sensors || []).find((s) => s.entity_id === sensorId);
   return sensor ? sensor.attributes.friendly_name || sensor.entity_id : sensorId;
+}
+
+// Dashboard
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+
+function updateDashboard() {
+  $("onboarding-card").style.display = isHomeAssistantConfigured() ? "none" : "block";
+  updateConnectionStatus(isConnected);
+
+  $("dashboard-alarm-card").style.display = appSettings.alarmSettings?.enabled ? "block" : "none";
+
+  const schedule = appSettings.dndSchedule || {};
+  let scheduleText = "";
+  if (schedule.enabled) {
+    const days = [1, 2, 3, 4, 5, 6, 0].filter((d) => schedule.days?.[d]).map((d) => DAY_NAMES[d]);
+    const daysText = days.length === 7 ? "tutti i giorni" : days.length === 0 ? "nessun giorno" : days.join(", ");
+    scheduleText = `Pianificato ${schedule.startTime}–${schedule.endTime}, ${daysText}`;
+  }
+  $("dnd-schedule-summary").textContent = scheduleText;
+
+  const mappings = appSettings.sensorCameraMappings || [];
+  const activeCount = lastSensorStatus.filter((s) => s.status === "on").length;
+  $("dashboard-sensor-count").textContent = mappings.length;
+  $("dashboard-sensor-active").textContent = mappings.length === 0
+    ? "Nessuna mappatura"
+    : activeCount > 0 ? `${activeCount} attiv${activeCount === 1 ? "o" : "i"} ora` : "Tutti inattivi";
+
+  $("quick-open-gate-btn").style.display = appSettings.gateSettings?.gateLockId ? "" : "none";
+}
+
+function updateDndDisplay(dndMode) {
+  if (dndToggle) dndToggle.checked = dndMode;
+  if (dndStatus) dndStatus.textContent = dndMode ? "Attivo: nessuna finestra PiP" : "Disattivato";
+}
+
+async function openGateFromDashboard() {
+  if (!confirm("Aprire il cancello?")) return;
+  const button = $("quick-open-gate-btn");
+  button.disabled = true;
+  try {
+    const result = await ipcRenderer.invoke("open-gate");
+    if (result?.success) {
+      showNotification("Comando di apertura inviato", "success");
+    } else {
+      showNotification("Impossibile aprire il cancello: " + (result?.error || "errore sconosciuto"), "error");
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// Ultimi eventi
+const EVENT_ICONS = { sensor: "👁", intercom: "🔔", gate: "🔓", alarm: "🚨", connection: "📡" };
+
+function formatEventTime(isoTime) {
+  const date = new Date(isoTime);
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 60000) return "adesso";
+  if (diffMs < 3600000) return `${Math.floor(diffMs / 60000)} min fa`;
+  const time = date.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  const isToday = date.toDateString() === new Date().toDateString();
+  return isToday ? time : `${date.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })} ${time}`;
+}
+
+function renderEvents() {
+  const list = $("event-list");
+  if (!list) return;
+
+  if (recentEvents.length === 0) {
+    list.innerHTML = '<p class="empty-state">Nessun evento dall\'avvio dell\'app</p>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  recentEvents.slice(0, 15).forEach((event) => {
+    const item = document.createElement("div");
+    item.className = `event-item ${event.type}`;
+
+    const icon = document.createElement("span");
+    icon.className = "event-icon";
+    icon.textContent = EVENT_ICONS[event.type] || "•";
+
+    const body = document.createElement("div");
+    body.className = "event-body";
+    const title = document.createElement("div");
+    title.className = "event-title";
+    title.textContent = event.title;
+    body.appendChild(title);
+    if (event.detail) {
+      const detail = document.createElement("div");
+      detail.className = "event-detail";
+      detail.textContent = event.detail;
+      body.appendChild(detail);
+    }
+
+    const time = document.createElement("span");
+    time.className = "event-time";
+    time.textContent = formatEventTime(event.time);
+    time.title = new Date(event.time).toLocaleString("it-IT");
+
+    item.append(icon, body, time);
+    fragment.appendChild(item);
+  });
+  list.replaceChildren(fragment);
+}
+
+// Telecamere personalizzate
+function renderCustomCameras() {
+  const list = $("custom-camera-list");
+  if (!list) return;
+  const cameras = appSettings.customCameras || [];
+
+  if (cameras.length === 0) {
+    list.innerHTML = "<p>Nessuna telecamera personalizzata</p>";
+    return;
+  }
+
+  const streamLabels = { auto: "Auto", mjpeg: "MJPEG", hls: "HLS", mp4: "MP4" };
+  const fragment = document.createDocumentFragment();
+  cameras.forEach((camera) => {
+    const item = document.createElement("div");
+    item.className = "custom-camera-item";
+
+    const info = document.createElement("div");
+    info.className = "custom-camera-info";
+    const name = document.createElement("h4");
+    name.textContent = `${camera.name} · ${streamLabels[camera.streamType] || "Auto"}`;
+    const url = document.createElement("p");
+    url.textContent = camera.url;
+    url.title = camera.url;
+    info.append(name, url);
+
+    const actions = document.createElement("div");
+    actions.className = "custom-camera-actions";
+    const edit = document.createElement("button");
+    edit.className = "btn-edit";
+    edit.textContent = "Modifica";
+    edit.addEventListener("click", () => openCustomCameraModal(camera.id));
+    const remove = document.createElement("button");
+    remove.className = "btn-remove";
+    remove.textContent = "Rimuovi";
+    remove.addEventListener("click", () => removeCustomCamera(camera.id));
+    actions.append(edit, remove);
+
+    item.append(info, actions);
+    fragment.appendChild(item);
+  });
+  list.replaceChildren(fragment);
+}
+
+function openCustomCameraModal(cameraId = null) {
+  editingCustomCameraId = cameraId;
+  const camera = (appSettings.customCameras || []).find((c) => c.id === cameraId);
+  $("custom-camera-modal-title").textContent = camera ? "Modifica telecamera" : "Aggiungi telecamera";
+  $("custom-camera-name").value = camera?.name || "";
+  $("custom-camera-url").value = camera?.url || "";
+  $("custom-camera-stream-type").value = camera?.streamType || "auto";
+  $("custom-camera-modal").classList.add("show");
+  setTimeout(() => $("custom-camera-name").focus(), 50);
+}
+
+function closeCustomCameraModal() {
+  $("custom-camera-modal").classList.remove("show");
+  editingCustomCameraId = null;
+}
+
+async function persistCustomCameras(customCameras, sensorCameraMappings = appSettings.sensorCameraMappings) {
+  const updated = { ...appSettings, customCameras, sensorCameraMappings };
+  await ipcRenderer.invoke("save-settings", updated);
+  appSettings = updated;
+  mappingManager.setAppSettings(appSettings);
+  renderCustomCameras();
+  updateCameraSelects();
+  updateDashboard();
+}
+
+async function saveCustomCamera() {
+  const name = $("custom-camera-name").value.trim();
+  const url = $("custom-camera-url").value.trim();
+  const streamType = $("custom-camera-stream-type").value || "auto";
+
+  if (!name) {
+    showNotification("Inserisci un nome per la telecamera", "error");
+    return;
+  }
+  if (!/^https?:\/\/\S+$/i.test(url)) {
+    showNotification("Inserisci un URL valido (http:// o https://)", "error");
+    return;
+  }
+
+  const cameras = [...(appSettings.customCameras || [])];
+  if (editingCustomCameraId) {
+    const index = cameras.findIndex((c) => c.id === editingCustomCameraId);
+    if (index >= 0) cameras[index] = { ...cameras[index], name, url, streamType };
+  } else {
+    cameras.push({ id: `custom_${Date.now()}`, name, url, streamType });
+  }
+
+  try {
+    const wasEditing = !!editingCustomCameraId;
+    await persistCustomCameras(cameras);
+    closeCustomCameraModal();
+    showNotification(wasEditing ? "Telecamera aggiornata" : "Telecamera aggiunta", "success");
+  } catch (error) {
+    showNotification("Errore nel salvataggio della telecamera: " + error.message, "error");
+  }
+}
+
+async function removeCustomCamera(cameraId) {
+  const camera = (appSettings.customCameras || []).find((c) => c.id === cameraId);
+  if (!camera) return;
+  const usedBy = (appSettings.sensorCameraMappings || []).filter((m) => m.cameraId === cameraId);
+  const warning = usedBy.length > 0
+    ? `\n\nÈ usata da ${usedBy.length} mappatur${usedBy.length === 1 ? "a, che verrà rimossa" : "e, che verranno rimosse"}.`
+    : "";
+  if (!confirm(`Rimuovere la telecamera "${camera.name}"?${warning}`)) return;
+
+  try {
+    await persistCustomCameras(
+      appSettings.customCameras.filter((c) => c.id !== cameraId),
+      (appSettings.sensorCameraMappings || []).filter((m) => m.cameraId !== cameraId)
+    );
+    showNotification("Telecamera rimossa", "success");
+  } catch (error) {
+    showNotification("Errore nella rimozione della telecamera: " + error.message, "error");
+  }
 }
 
 // Funzioni per il test
 async function testPiP() {
-  // Controlla se la modalità DND è attiva
   if (dndToggle && dndToggle.checked) {
-    showNotification("Impossibile eseguire il test: modalità Non Disturbare attiva", "warning");
+    showNotification("Disattiva Non disturbare per provare una telecamera", "warning");
     return;
   }
 
-  const cameraId = document.getElementById("test-camera")?.value;
-  const cameraUrl = document.getElementById("test-camera-url")?.value;
-  const duration = parseInt(document.getElementById("test-duration")?.value || 5);
-  const sizeSelect = document.getElementById("test-size")?.value || "medium";
+  const cameraId = $("test-camera")?.value;
+  const duration = readInt("test-duration", 10);
+  const sizeSelect = $("test-size")?.value || "medium";
 
-  // Verifica che sia stato selezionato una camera o inserito un URL
-  if (!cameraId && !cameraUrl) {
-    showNotification("Seleziona una telecamera o inserisci un URL", "error");
+  if (!cameraId) {
+    showNotification("Seleziona una telecamera", "error");
+    return;
+  }
+  if (duration < 1 || duration > 60) {
+    showNotification("La durata deve essere tra 1 e 60 secondi", "error");
     return;
   }
 
-  let cameraSettings = {
-    size: sizeSelect,
-  };
-
-  // Se è selezionata la dimensione personalizzata, aggiungi width e height
+  const cameraSettings = { size: sizeSelect };
   if (sizeSelect === "custom") {
-    const customWidth = parseInt(document.getElementById("test-custom-width")?.value || 320);
-    const customHeight = parseInt(document.getElementById("test-custom-height")?.value || 240);
-    
-    // Valida le dimensioni personalizzate
+    const customWidth = readInt("test-custom-width", 320);
+    const customHeight = readInt("test-custom-height", 240);
     if (customWidth < 100 || customWidth > 1920 || customHeight < 100 || customHeight > 1080) {
-      showNotification("Dimensioni personalizzate non valide. Larghezza: 100-1920px, Altezza: 100-1080px", "error");
+      showNotification("Dimensioni personalizzate non valide. Larghezza: 100-1920px, altezza: 100-1080px", "error");
       return;
     }
-    
     cameraSettings.width = customWidth;
     cameraSettings.height = customHeight;
   }
 
   try {
-    // Passiamo sia l'URL (se presente) sia l'ID della camera e la durata
-    // Il processo principale gestirà la generazione dell'URL con token dinamico
-    await ipcRenderer.invoke("test-camera", cameraUrl, cameraSettings, cameraId, duration);
-    showNotification("Test PiP avviato", "success");
+    await ipcRenderer.invoke("test-camera", null, cameraSettings, cameraId, duration);
+    showNotification("Prova avviata", "success");
   } catch (error) {
-    showNotification("Errore nell'avvio del test: " + error.message, "error");
+    showNotification("Errore nell'avvio della prova: " + error.message, "error");
   }
 }
 
-// Funzioni di notifica
+// Notifiche
 function showNotification(message, type = "info") {
   const notification = document.createElement("div");
   notification.className = `notification ${type}`;
   notification.textContent = message;
+  notification.setAttribute("role", type === "error" ? "alert" : "status");
 
   document.body.appendChild(notification);
 
@@ -766,15 +1002,11 @@ function showNotification(message, type = "info") {
 
   setTimeout(() => {
     notification.classList.remove("show");
-    setTimeout(() => {
-      if (notification.parentNode) {
-        notification.parentNode.removeChild(notification);
-      }
-    }, 250);
-  }, 3000);
+    setTimeout(() => notification.remove(), 250);
+  }, type === "error" ? 5000 : 3000);
 }
 
-// Funzioni per la gestione delle impostazioni
+// Gestione delle impostazioni
 async function exportSettings() {
   try {
     const result = await ipcRenderer.invoke("export-settings");
@@ -788,20 +1020,24 @@ async function exportSettings() {
   }
 }
 
+async function applyReplacedSettings(settings, message) {
+  appSettings = settings;
+  mappingManager.setAppSettings(appSettings);
+  updateUIFromSettings();
+  resetSettingsBaseline();
+  updateDashboard();
+  showNotification(message, "success");
+  if (isHomeAssistantConfigured()) {
+    await loadHomeAssistantDevices();
+  }
+}
+
 async function importSettings() {
+  if (window.hasUnsavedChanges && !confirm("Le modifiche non salvate andranno perse. Continuare?")) return;
   try {
     const result = await ipcRenderer.invoke("import-settings");
     if (result.success) {
-      appSettings = result.settings;
-      updateUIFromSettings();
-      showNotification("Impostazioni importate con successo", "success");
-
-      // Ricarica i dispositivi se Home Assistant è configurato
-      if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
-        await loadHomeAssistantDevices();
-        // Reinizializza il gestore delle mappature con i dispositivi aggiornati
-        mappingManager = new MappingManager(appSettings, homeAssistantDevices);
-      }
+      await applyReplacedSettings(result.settings, "Impostazioni importate");
     } else if (!result.canceled) {
       showNotification(`Errore nell'importazione: ${result.error}`, "error");
     }
@@ -811,45 +1047,28 @@ async function importSettings() {
 }
 
 async function resetSettings() {
-  if (confirm("Sei sicuro di voler resettare tutte le impostazioni ai valori predefiniti? Questa azione non può essere annullata.")) {
-    try {
-      const result = await ipcRenderer.invoke("reset-settings");
-      if (result.success) {
-        appSettings = result.settings;
-        updateUIFromSettings();
-        showNotification("Impostazioni resettate con successo", "success");
-
-        // Ricarica i dispositivi se Home Assistant è configurato
-        if (appSettings.homeAssistantUrl && appSettings.homeAssistantToken) {
-          await loadHomeAssistantDevices();
-          // Reinizializza il gestore delle mappature con i dispositivi aggiornati
-          mappingManager = new MappingManager(appSettings, homeAssistantDevices);
-        }
-      } else {
-        showNotification(`Errore nel reset: ${result.error}`, "error");
-      }
-    } catch (error) {
-      showNotification("Errore nel reset delle impostazioni: " + error.message, "error");
+  if (!confirm("Ripristinare tutte le impostazioni predefinite? Verranno rimosse anche le mappature e la connessione a Home Assistant. L'operazione non si può annullare.")) {
+    return;
+  }
+  try {
+    const result = await ipcRenderer.invoke("reset-settings");
+    if (result.success) {
+      await applyReplacedSettings(result.settings, "Impostazioni ripristinate");
+    } else {
+      showNotification(`Errore nel ripristino: ${result.error}`, "error");
     }
+  } catch (error) {
+    showNotification("Errore nel ripristino delle impostazioni: " + error.message, "error");
   }
 }
 
-// IPC event listeners
-ipcRenderer.on("open-settings", () => {
-  // Switch to settings tab
-  const settingsTab = document.querySelector('[data-tab="settings"]');
-  if (settingsTab) {
-    settingsTab.click();
-  }
-});
+ipcRenderer.on("open-settings", () => switchTab("settings"));
 
-// Carica lo stato dell'avvio automatico
 async function loadAutoStartStatus() {
   try {
     const result = await ipcRenderer.invoke("get-auto-start-status");
-    const autoStartToggle = document.getElementById("auto-start-toggle");
-    if (autoStartToggle && result !== undefined) {
-      autoStartToggle.checked = result.enabled || false;
+    if (result !== undefined) {
+      $("auto-start-toggle").checked = result.enabled || false;
     }
   } catch (error) {
     console.error("Errore nel caricamento dello stato dell'avvio automatico:", error);
@@ -859,25 +1078,20 @@ async function loadAutoStartStatus() {
 async function loadAppVersion() {
   try {
     const { version } = await ipcRenderer.invoke("get-app-version");
-    const el = document.getElementById("app-version");
-    if (el) {
-      el.textContent = `v${version}`;
-    }
+    $("app-version").textContent = `v${version}`;
   } catch (error) {
     console.error("Errore nel caricamento della versione:", error);
   }
 }
 
 async function checkForUpdates() {
+  const content = $("update-status-content");
   try {
     const result = await ipcRenderer.invoke("check-for-updates");
-    const content = document.getElementById("update-status-content");
-    const btn = document.getElementById("check-update-btn");
     if (!content) return;
 
     if (result.error) {
       content.innerHTML = `<span class="status-text" style="color: var(--text-tertiary)">Impossibile verificare gli aggiornamenti</span>`;
-      if (btn) btn.textContent = "Verifica Aggiornamenti";
       return;
     }
 
@@ -893,19 +1107,14 @@ async function checkForUpdates() {
           </div>
           <span class="status-text" style="color: var(--text-tertiary); font-size: 0.8125rem">Installata: v${result.currentVersion}</span>
           ${changelogHtml}
-          <button id="open-downloads-btn" class="btn primary" style="margin-top: 0.5rem">Scarica Aggiornamento</button>
+          <button id="open-downloads-btn" class="btn primary" style="margin-top: 0.5rem">Scarica aggiornamento</button>
         </div>`;
 
-      const dlBtn = document.getElementById("open-downloads-btn");
-      if (dlBtn) {
-        dlBtn.addEventListener("click", () => {
-          ipcRenderer.invoke("open-release-page", "https://git.devmin.it/carmine/homesentinel-app/releases/");
-        });
-      }
-      if (btn) btn.textContent = "Verifica Aggiornamenti";
+      $("open-downloads-btn")?.addEventListener("click", () => {
+        ipcRenderer.invoke("open-release-page", "https://git.devmin.it/carmine/homesentinel-app/releases/");
+      });
     } else {
-      content.innerHTML = `<span class="status-text" style="color: var(--success)">L'app e aggiornata (v${result.currentVersion})</span>`;
-      if (btn) btn.textContent = "Verifica Aggiornamenti";
+      content.innerHTML = `<span class="status-text" style="color: var(--success)">L'app è aggiornata (v${result.currentVersion})</span>`;
     }
   } catch (error) {
     console.error("Errore nel check aggiornamenti:", error);
@@ -913,31 +1122,25 @@ async function checkForUpdates() {
 }
 
 ipcRenderer.on("dnd-mode-changed", (event, dndMode) => {
-  if (dndToggle) {
-    dndToggle.checked = dndMode;
-  }
-  if (dndStatus) {
-    dndStatus.textContent = dndMode ? "Attivato" : "Disattivato";
-  }
+  appSettings.dndMode = dndMode;
+  updateDndDisplay(dndMode);
 });
 
-ipcRenderer.on("connection-status-changed", (event, isConnected) => {
-  updateConnectionStatus(isConnected);
+ipcRenderer.on("connection-status-changed", (event, connected) => {
+  updateConnectionStatus(connected);
 });
 
 ipcRenderer.on("alarm-state-changed", (event, state) => {
   updateAlarmStateDisplay(state);
 });
 
-function updateAlarmStateDisplay(state) {
-  const display = document.getElementById("alarm-state-display");
-  const text = document.getElementById("alarm-state-text");
-  const dot = document.getElementById("alarm-state-dot");
-  if (!display || !text || !dot) return;
+ipcRenderer.on("event-logged", (event, entry) => {
+  recentEvents.unshift(entry);
+  recentEvents.length = Math.min(recentEvents.length, 50);
+  renderEvents();
+});
 
-  const { getAlarmStateLabel } = require("./src/shared/alarm-states");
-  text.textContent = getAlarmStateLabel(state);
-
+function setAlarmDot(dot, state) {
   dot.classList.remove("triggered", "armed", "disarmed", "offline");
   const lower = (state || "").toLowerCase();
   if (lower === "triggered") {
@@ -951,13 +1154,24 @@ function updateAlarmStateDisplay(state) {
   }
 }
 
+function updateAlarmStateDisplay(state) {
+  const label = getAlarmStateLabel(state);
+  [["alarm-state-text", "alarm-state-dot"], ["dashboard-alarm-text", "dashboard-alarm-dot"]].forEach(([textId, dotId]) => {
+    const text = $(textId);
+    const dot = $(dotId);
+    if (!text || !dot) return;
+    text.textContent = label;
+    setAlarmDot(dot, state);
+  });
+}
+
 async function refreshAlarmState() {
-  const display = document.getElementById("alarm-state-display");
-  const alarmEnabled = document.getElementById("alarm-enabled")?.checked;
+  const display = $("alarm-state-display");
+  const alarmEnabled = $("alarm-enabled")?.checked;
   if (display) {
-    display.style.display = alarmEnabled ? "block" : "none";
+    display.style.display = alarmEnabled ? "" : "none";
   }
-  if (!alarmEnabled) return;
+  if (!alarmEnabled && !appSettings.alarmSettings?.enabled) return;
   try {
     const result = await ipcRenderer.invoke("get-alarm-state");
     updateAlarmStateDisplay(result?.state);
@@ -966,5 +1180,10 @@ async function refreshAlarmState() {
   }
 }
 
-// Update sensor status periodically
-setInterval(updateSensorStatus, 5000);
+// Aggiorna periodicamente lo stato dei sensori, solo quando la finestra è visibile
+setInterval(() => {
+  if (!document.hidden) updateSensorStatus();
+}, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) updateSensorStatus();
+});

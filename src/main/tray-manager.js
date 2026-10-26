@@ -127,28 +127,17 @@ class TrayManager {
   }
 
   _toggleDndMode() {
-    this.dndMode = !this.dndMode;
-    this._updateContextMenu();
-    if (this.onDndModeChange) this.onDndModeChange(this.dndMode);
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send("dnd-mode-changed", this.dndMode);
-    }
-    const settings = this.settingsManager.getSettings();
-    settings.dndMode = this.dndMode;
-    this.settingsManager.updateSettings(settings);
-    this.settingsManager.saveSettingsToFile();
+    this.setDndMode(!this.dndMode);
   }
 
   setDndMode(enabled) {
-    this.dndMode = enabled;
+    this.dndMode = !!enabled;
     this._updateContextMenu();
     if (this.onDndModeChange) this.onDndModeChange(this.dndMode);
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("dnd-mode-changed", this.dndMode);
     }
-    const settings = this.settingsManager.getSettings();
-    settings.dndMode = this.dndMode;
-    this.settingsManager.updateSettings(settings);
+    this.settingsManager.updateSettings({ dndMode: this.dndMode });
     this.settingsManager.saveSettingsToFile();
   }
 

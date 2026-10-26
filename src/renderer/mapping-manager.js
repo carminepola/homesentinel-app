@@ -209,13 +209,23 @@ class MappingManager {
         dropdown.style.display = "block";
       });
 
-      // Close dropdown when clicking outside
-      document.addEventListener("click", (e) => {
+      // Close dropdown when clicking outside (un solo listener anche dopo una reinizializzazione)
+      if (this.outsideClickHandler) {
+        document.removeEventListener("click", this.outsideClickHandler);
+      }
+      this.outsideClickHandler = (e) => {
         if (!autocompleteContainer.contains(e.target)) {
           dropdown.style.display = "none";
         }
-      });
+      };
+      document.addEventListener("click", this.outsideClickHandler);
     }
+  }
+
+  // Aggiorna il riferimento alle impostazioni (dopo salvataggio, import o reset)
+  setAppSettings(appSettings) {
+    this.appSettings = appSettings;
+    this.updateSensorMappingsList();
   }
 
   // Aggiorna i dispositivi Home Assistant
@@ -286,12 +296,12 @@ class MappingManager {
       const mapping = this.appSettings.sensorCameraMappings.find((m) => m.id === mappingId);
       if (mapping) {
         this.loadMappingIntoModal(mapping);
-        document.querySelector("#mapping-modal .modal-header h3").textContent = "Modifica Mappatura Sensore-Telecamera";
+        document.querySelector("#mapping-modal .modal-header h3").textContent = "Modifica mappatura";
       }
     } else {
       // Modalità aggiunta
       this.resetModalForm();
-      document.querySelector("#mapping-modal .modal-header h3").textContent = "Aggiungi Mappatura Sensore-Telecamera";
+      document.querySelector("#mapping-modal .modal-header h3").textContent = "Aggiungi mappatura";
     }
 
     this.modal.classList.add("show");
@@ -328,7 +338,7 @@ class MappingManager {
     }
 
     // Ripristina il titolo del modale
-    document.querySelector("#mapping-modal .modal-header h3").textContent = "Aggiungi Mappatura Sensore-Telecamera";
+    document.querySelector("#mapping-modal .modal-header h3").textContent = "Aggiungi mappatura";
   }
 
   // Carica i dati della mappatura nel modale
@@ -345,22 +355,23 @@ class MappingManager {
     }
 
     this.cameraSelect.value = mapping.cameraId || "";
-    document.getElementById("mapping-duration").value = mapping.duration;
+    document.getElementById("mapping-duration").value = mapping.duration || "";
     document.getElementById("mapping-stream-type").value = mapping.streamType || "auto";
     
     // Gestisci le dimensioni personalizzate
     const sizeSelect = document.getElementById("mapping-size");
     const customSizeContainer = document.getElementById("mapping-custom-size-container");
     
-    if (mapping.cameraSettings.width && mapping.cameraSettings.height) {
+    const cameraSettings = mapping.cameraSettings || {};
+    if (cameraSettings.width && cameraSettings.height) {
       // Se ci sono dimensioni personalizzate, seleziona "custom" e mostra i campi
       sizeSelect.value = "custom";
       customSizeContainer.style.display = "block";
-      document.getElementById("mapping-custom-width").value = mapping.cameraSettings.width;
-      document.getElementById("mapping-custom-height").value = mapping.cameraSettings.height;
+      document.getElementById("mapping-custom-width").value = cameraSettings.width;
+      document.getElementById("mapping-custom-height").value = cameraSettings.height;
     } else {
-      // Altrimenti usa la dimensione predefinita
-      sizeSelect.value = mapping.cameraSettings.size || "medium";
+      // Altrimenti usa la dimensione scelta ("" = predefinita delle impostazioni)
+      sizeSelect.value = cameraSettings.size || "";
       customSizeContainer.style.display = "none";
     }
 
@@ -371,8 +382,9 @@ class MappingManager {
   resetModalForm() {
     this.sensorSelect.value = "";
     this.cameraSelect.value = "";
-    document.getElementById("mapping-duration").value = "10";
-    document.getElementById("mapping-size").value = "medium";
+    document.getElementById("mapping-duration").value = "";
+    document.getElementById("mapping-size").value = "";
+    document.getElementById("mapping-custom-size-container").style.display = "none";
     document.getElementById("mapping-stream-type").value = "auto";
     this.setAlarmStateChecks(null);
   }
@@ -380,7 +392,9 @@ class MappingManager {
   // Salva la mappatura sensore-telecamera
   async saveSensorMapping() {
     const cameraId = this.cameraSelect.value;
-    const duration = parseInt(document.getElementById("mapping-duration").value);
+    const durationValue = document.getElementById("mapping-duration").value;
+    // Vuoto = durata predefinita delle impostazioni
+    const duration = durationValue === "" ? null : parseInt(durationValue, 10);
     const sizeSelect = document.getElementById("mapping-size").value;
 
     let sensorId = this.sensorSelect.value;
@@ -408,9 +422,12 @@ class MappingManager {
       return;
     }
 
-    let cameraSettings = {
-      size: sizeSelect,
-    };
+    if (duration !== null && (Number.isNaN(duration) || duration < 1 || duration > 60)) {
+      this.showNotification("La durata deve essere tra 1 e 60 secondi", "error");
+      return;
+    }
+
+    const cameraSettings = sizeSelect ? { size: sizeSelect } : {};
 
     // Se è selezionata la dimensione personalizzata, aggiungi width e height
     if (sizeSelect === "custom") {
@@ -479,67 +496,84 @@ class MappingManager {
     if (!this.sensorList) return;
 
     if (!this.appSettings.sensorCameraMappings || this.appSettings.sensorCameraMappings.length === 0) {
-      this.sensorList.innerHTML = "<p>Nessuna mappatura configurata</p>";
+      this.sensorList.innerHTML = '<p class="empty-state">Nessuna mappatura: aggiungine una per vedere la telecamera quando un sensore si attiva</p>';
       return;
     }
 
     this.sensorList.innerHTML = "";
 
+    const pipSettings = this.appSettings.pipSettings || {};
+    const fragment = document.createDocumentFragment();
+
     this.appSettings.sensorCameraMappings.forEach((mapping) => {
       const mappingElement = document.createElement("div");
       mappingElement.className = "sensor-mapping";
 
+      const cameraSettings = mapping.cameraSettings || {};
       const sensorName = this.getSensorName(mapping.sensorId);
       const cameraName = this.getCameraName(mapping.cameraId) || mapping.cameraId || "Telecamera";
       const streamTypeLabels = { auto: "Auto", hls: "HLS", mjpeg: "MJPEG" };
       const streamTypeLabel = streamTypeLabels[mapping.streamType] || "Auto";
-      const sizeName = this.getSizeName(mapping.cameraSettings.size);
+      const durationLabel = mapping.duration ? `${mapping.duration}s` : `predefinita (${pipSettings.defaultDuration || 10}s)`;
+      let sizeLabel;
+      if (cameraSettings.width && cameraSettings.height) {
+        sizeLabel = `${cameraSettings.width}×${cameraSettings.height}`;
+      } else if (cameraSettings.size) {
+        sizeLabel = this.getSizeName(cameraSettings.size);
+      } else {
+        sizeLabel = `predefinita (${this.getSizeName(pipSettings.size || "medium")})`;
+      }
       const statesLabel = this.getVisibleStatesLabel(mapping.visibleStates);
 
       mappingElement.innerHTML = `
         <div class="mapping-main">
-          <h4 class="mapping-title">${cameraName}</h4>
-          <span class="mapping-subtitle">Sensore: ${sensorName}</span>
+          <h4 class="mapping-title"></h4>
+          <span class="mapping-subtitle"></span>
           <div class="mapping-meta">
             <span class="meta-chip">Stream: ${streamTypeLabel}</span>
-            <span class="meta-chip">Durata: ${mapping.duration}s</span>
-            <span class="meta-chip">Dim: ${sizeName}</span>
+            <span class="meta-chip"></span>
+            <span class="meta-chip"></span>
           </div>
-          <span class="mapping-states">Visibile in: ${statesLabel}</span>
+          <span class="mapping-states"></span>
         </div>
         <div class="sensor-mapping-actions">
-          <button class="btn-edit" data-id="${mapping.id}">Modifica</button>
-          <button class="btn-remove" data-id="${mapping.id}">Rimuovi</button>
+          <button class="btn-edit">Modifica</button>
+          <button class="btn-remove">Rimuovi</button>
         </div>
       `;
+      // I nomi arrivano da Home Assistant: inseriti come testo, non come HTML
+      mappingElement.querySelector(".mapping-title").textContent = cameraName;
+      mappingElement.querySelector(".mapping-subtitle").textContent = `Sensore: ${sensorName}`;
+      const chips = mappingElement.querySelectorAll(".meta-chip");
+      chips[1].textContent = `Durata: ${durationLabel}`;
+      chips[2].textContent = `Dimensione: ${sizeLabel}`;
+      mappingElement.querySelector(".mapping-states").textContent = `Visibile in: ${statesLabel}`;
 
-      this.sensorList.appendChild(mappingElement);
-    });
-
-    // Add event listeners to edit buttons
-    document.querySelectorAll(".btn-edit").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const id = button.getAttribute("data-id");
-        this.openMappingModal(id);
+      mappingElement.querySelector(".btn-edit").addEventListener("click", () => {
+        this.openMappingModal(mapping.id);
       });
-    });
-
-    // Add event listeners to remove buttons
-    document.querySelectorAll(".btn-remove").forEach((button) => {
-      button.addEventListener("click", async () => {
-        const id = button.getAttribute("data-id");
-        this.appSettings.sensorCameraMappings = this.appSettings.sensorCameraMappings.filter((m) => m.id !== id);
-
-        try {
-          const { ipcRenderer } = require("electron");
-          await ipcRenderer.invoke("save-settings", this.appSettings);
-          this.updateSensorMappingsList();
-          this.showNotification("Mappatura rimossa", "success");
-        } catch (error) {
-          this.showNotification("Errore nella rimozione della mappatura: " + error.message, "error");
-        }
+      mappingElement.querySelector(".btn-remove").addEventListener("click", () => {
+        this.removeMapping(mapping.id, `${sensorName} → ${cameraName}`);
       });
+
+      fragment.appendChild(mappingElement);
     });
+
+    this.sensorList.replaceChildren(fragment);
+  }
+
+  async removeMapping(id, label) {
+    if (!confirm(`Rimuovere la mappatura "${label}"?`)) return;
+
+    this.appSettings.sensorCameraMappings = this.appSettings.sensorCameraMappings.filter((m) => m.id !== id);
+    try {
+      const { ipcRenderer } = require("electron");
+      await ipcRenderer.invoke("save-settings", this.appSettings);
+      this.updateSensorMappingsList();
+      this.showNotification("Mappatura rimossa", "success");
+    } catch (error) {
+      this.showNotification("Errore nella rimozione della mappatura: " + error.message, "error");
+    }
   }
 
   // Ottiene il nome del sensore
@@ -564,12 +598,13 @@ class MappingManager {
   // Ottiene il nome della dimensione
   getSizeName(size) {
     const sizes = {
-      small: "Piccolo",
-      medium: "Medio",
+      small: "Piccola",
+      medium: "Media",
       large: "Grande",
-      square: "Quadrato",
+      square: "Quadrata",
       horizontal: "Orizzontale",
       vertical: "Verticale",
+      custom: "Personalizzata",
     };
     return sizes[size] || size;
   }

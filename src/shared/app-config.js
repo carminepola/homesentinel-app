@@ -42,8 +42,22 @@ const appConfig = {
 
   // Configurazione WebSocket
   websocket: {
-    reconnectDelay: 5000,
-    heartbeatInterval: 30000,
+    reconnectDelay: 1000, // Primo tentativo di riconnessione, poi backoff esponenziale
+    maxReconnectDelay: 30000,
+    authFailedReconnectDelay: 300000, // Token non valido: inutile riprovare spesso
+    heartbeatInterval: 20000,
+    pongTimeout: 10000, // Senza pong entro questo tempo la connessione è considerata persa
+    handshakeTimeout: 10000,
+    requestTimeout: 10000,
+    httpTimeout: 8000, // Timeout per le chiamate REST a Home Assistant
+    wakeCheckTimeout: 3000, // Ping di verifica dopo sospensione/sblocco
+    disconnectNotifyDelay: 15000, // Notifica la disconnessione solo se dura più di così
+  },
+
+  // Pre-riscaldamento degli stream
+  preWarmer: {
+    hlsKeepAliveInterval: 15000, // Frequenza di interrogazione della playlist HLS
+    requestTimeout: 8000,
   },
 
   // Configurazione streaming HLS

@@ -78,9 +78,10 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 1.25rem;
-  padding: 1.5rem 2rem;
-  max-width: 1100px;
+  padding: 2rem 2rem 3rem;
+  max-width: 1600px;
   width: 100%;
+  height: 100%;
   animation: alarmContentIn 0.5s ease-out 0.1s both;
 }
 
@@ -224,9 +225,11 @@ body {
   font-weight: 800;
 }
 
+/* Le telecamere occupano tutto lo spazio rimasto: sono l'informazione più importante */
 .alarm-cameras {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-auto-rows: minmax(220px, 1fr);
   gap: 0.75rem;
   width: 100%;
   flex: 1;
@@ -278,16 +281,18 @@ body {
   overflow: hidden;
 }
 
-.alarm-camera-feed img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.alarm-camera-feed {
+  position: relative;
 }
 
+.alarm-camera-feed img,
 .alarm-camera-feed video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: #000;
 }
 
 .alarm-camera-loading {

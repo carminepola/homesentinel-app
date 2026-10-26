@@ -133,7 +133,13 @@ class IPCHandlers {
     });
 
     ipcMain.handle("open-release-page", (event, url) => {
-      shell.openExternal(url);
+      if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+        shell.openExternal(url);
+      }
+    });
+
+    ipcMain.handle("get-connection-status", () => {
+      return this.websocketManager ? this.websocketManager.isConnected() : false;
     });
 
     ipcMain.handle("test-alarm", () => {
@@ -150,53 +156,49 @@ class IPCHandlers {
 
   async handleSaveSettings(settings) {
     const oldSettings = this.settingsManager.getSettings();
-    this.settingsManager.updateSettings(settings);
+    // Lo stato DnD è gestito dalla tray (anche dalla pianificazione): non sovrascriverlo con una copia vecchia
+    const newSettings = { ...settings };
+    if (this.trayManager) {
+      newSettings.dndMode = this.trayManager.getDndMode();
+    }
+    this.settingsManager.updateSettings(newSettings);
 
-    if (!this.settingsManager.saveSettingsToFile()) {
+    if (!(await this.settingsManager.saveSettingsToFile())) {
       throw new Error("Impossibile salvare le impostazioni su file");
     }
 
     // Gestisci l'avvio automatico se modificato
-    const autoStartChanged = oldSettings.autoStart !== settings.autoStart;
+    const autoStartChanged = oldSettings.autoStart !== newSettings.autoStart;
     if (autoStartChanged && this.autoStartManager) {
-      await this.autoStartManager.setAutoStart(settings.autoStart);
+      await this.autoStartManager.setAutoStart(newSettings.autoStart);
     }
 
-    const haSettingsChanged = oldSettings.homeAssistantUrl !== settings.homeAssistantUrl ||
-                           oldSettings.homeAssistantToken !== settings.homeAssistantToken;
+    this.applySettingsChanges(oldSettings, this.settingsManager.getSettings());
+    return true;
+  }
 
-    const mappingsChanged = JSON.stringify(oldSettings.sensorCameraMappings) !==
-                          JSON.stringify(settings.sensorCameraMappings);
+  // Riavvia solo i componenti interessati dalle impostazioni modificate
+  applySettingsChanges(oldSettings, newSettings) {
+    const changed = (key) => JSON.stringify(oldSettings[key]) !== JSON.stringify(newSettings[key]);
 
-    const alarmChanged = JSON.stringify(oldSettings.alarmSettings) !==
-                       JSON.stringify(settings.alarmSettings);
-
-    const gateChanged = JSON.stringify(oldSettings.gateSettings) !==
-                      JSON.stringify(settings.gateSettings);
+    const haSettingsChanged = changed("homeAssistantUrl") || changed("homeAssistantToken");
+    const mappingsChanged = changed("sensorCameraMappings") || changed("customCameras");
+    const streamingChanged = changed("streamingSettings");
 
     if (haSettingsChanged) {
       this.websocketManager.closeConnection();
       this.websocketManager.connectToHomeAssistant();
-    } else if (mappingsChanged || alarmChanged || gateChanged) {
+    } else if (mappingsChanged || changed("alarmSettings") || changed("gateSettings")) {
       this.websocketManager.updateSubscriptions();
     }
 
-    const preWarmerChanged = JSON.stringify(oldSettings.preWarmerSettings) !==
-                           JSON.stringify(settings.preWarmerSettings);
-
-    if (preWarmerChanged || mappingsChanged || haSettingsChanged) {
-      if (this.streamPreWarmer) {
-        this.streamPreWarmer.restart();
-      }
+    if (this.streamPreWarmer && (changed("preWarmerSettings") || mappingsChanged || haSettingsChanged || streamingChanged)) {
+      this.streamPreWarmer.restart();
     }
 
-    const dndScheduleChanged = JSON.stringify(oldSettings.dndSchedule) !==
-                              JSON.stringify(settings.dndSchedule);
-    if (dndScheduleChanged && this.dndScheduler) {
+    if (this.dndScheduler && changed("dndSchedule")) {
       this.dndScheduler.restart();
     }
-
-    return true;
   }
 
   async handleGetHomeAssistantDevices() {
@@ -207,11 +209,12 @@ class IPCHandlers {
     }
 
     try {
-      const response = await fetch(`${settings.homeAssistantUrl}/api/states`, {
+      const response = await fetch(`${this.websocketManager.getBaseUrl()}/api/states`, {
         headers: {
           Authorization: `Bearer ${settings.homeAssistantToken}`,
           "Content-Type": "application/json",
         },
+        signal: AbortSignal.timeout(15000),
       });
 
       if (!response.ok) {
@@ -241,7 +244,7 @@ class IPCHandlers {
     const settings = this.settingsManager.getSettings();
     const sensorStates = this.websocketManager.getSensorStates();
 
-    return settings.sensorCameraMappings.map((mapping) => ({
+    return (settings.sensorCameraMappings || []).map((mapping) => ({
       sensorId: mapping.sensorId,
       status: sensorStates.get(mapping.sensorId) || "unknown",
     }));
@@ -249,13 +252,28 @@ class IPCHandlers {
 
   async handleExportSettings() {
     try {
+      // Il file esportato non è cifrato: chiedi se includere token e PIN
+      const { response } = await dialog.showMessageBox(this.mainWindow, {
+        type: "question",
+        buttons: ["Annulla", "Includi token e PIN", "Escludi dati sensibili"],
+        defaultId: 2,
+        cancelId: 0,
+        title: "Esporta impostazioni",
+        message: "Includere i dati sensibili nel file esportato?",
+        detail: "Il file è in chiaro: chi lo legge vede il token di Home Assistant e il PIN dell'allarme. "
+          + "Escludendoli dovrai reinserirli dopo l'importazione.",
+      });
+      if (response === 0) {
+        return { success: false, canceled: true };
+      }
+
       const result = await dialog.showSaveDialog(this.mainWindow, {
-        defaultPath: "home-assistant-pip-settings.json",
+        defaultPath: "homesentinel-impostazioni.json",
         filters: [{ name: "JSON Files", extensions: ["json"] }],
       });
 
       if (!result.canceled && result.filePath) {
-        return this.settingsManager.exportSettings(result.filePath);
+        return this.settingsManager.exportSettings(result.filePath, { includeSecrets: response === 1 });
       }
       return { success: false, canceled: true };
     } catch (error) {
@@ -271,24 +289,14 @@ class IPCHandlers {
       });
 
       if (!result.canceled && result.filePaths.length > 0) {
+        const oldSettings = this.settingsManager.getSettings();
         const importResult = await this.settingsManager.importSettings(result.filePaths[0]);
 
         if (importResult.success) {
-          const oldSettings = this.settingsManager.getSettings();
-          const haSettingsChanged = oldSettings.homeAssistantUrl !== importResult.settings.homeAssistantUrl ||
-                                 oldSettings.homeAssistantToken !== importResult.settings.homeAssistantToken;
-
-          if (haSettingsChanged) {
-            this.websocketManager.closeConnection();
-            this.websocketManager.connectToHomeAssistant();
-          } else {
-            const mappingsChanged = JSON.stringify(oldSettings.sensorCameraMappings) !==
-                                   JSON.stringify(importResult.settings.sensorCameraMappings);
-
-            if (mappingsChanged) {
-              this.websocketManager.updateSubscriptions();
-            }
+          if (this.trayManager && importResult.settings.dndMode !== undefined) {
+            this.trayManager.setDndMode(!!importResult.settings.dndMode);
           }
+          this.applySettingsChanges(oldSettings, importResult.settings);
         }
 
         return importResult;
@@ -299,22 +307,19 @@ class IPCHandlers {
     }
   }
 
-  handleResetSettings() {
+  async handleResetSettings() {
     try {
       const oldSettings = this.settingsManager.getSettings();
       this.settingsManager.resetSettings();
 
-      if (!this.settingsManager.saveSettingsToFile()) {
+      if (!(await this.settingsManager.saveSettingsToFile())) {
         throw new Error("Impossibile salvare le impostazioni predefinite");
       }
 
-      const haSettingsChanged = oldSettings.homeAssistantUrl !== "" ||
-                             oldSettings.homeAssistantToken !== "";
-
-      if (haSettingsChanged) {
-        this.websocketManager.closeConnection();
-        this.websocketManager.connectToHomeAssistant();
+      if (this.trayManager) {
+        this.trayManager.setDndMode(false);
       }
+      this.applySettingsChanges(oldSettings, this.settingsManager.getSettings());
 
       return { success: true, settings: this.settingsManager.getSettings() };
     } catch (error) {
@@ -363,10 +368,8 @@ class IPCHandlers {
 
       if (result) {
         // Aggiorna anche le impostazioni
-        const settings = this.settingsManager.getSettings();
-        settings.autoStart = enabled;
-        this.settingsManager.updateSettings(settings);
-        this.settingsManager.saveSettingsToFile();
+        this.settingsManager.updateSettings({ autoStart: enabled });
+        await this.settingsManager.saveSettingsToFile();
       }
 
       return { success: result };
@@ -413,7 +416,7 @@ class IPCHandlers {
         return { error: "URL aggiornamenti non configurato" };
       }
 
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

@@ -1,8 +1,10 @@
 const { ipcRenderer } = require("electron");
+const { getAlarmStateLabel } = require("./src/shared/alarm-states");
 
 let startTime = null;
 let durationInterval = null;
 let isMuted = false;
+const MJPEG_MAX_RETRIES = 10;
 
 function init() {
   setupDismissButton();
@@ -81,7 +83,7 @@ function setupIpcListeners() {
       document.getElementById("alarm-sensor-name").textContent = data.sensorName;
     }
     if (data.state) {
-      document.getElementById("alarm-state").textContent = data.state;
+      document.getElementById("alarm-state").textContent = getAlarmStateLabel(data.state);
     }
     if (data.startTime) {
       startTime = new Date(data.startTime).getTime();
@@ -96,7 +98,7 @@ function setupIpcListeners() {
 
   ipcRenderer.on("alarm-state-update", (event, data) => {
     if (data.state) {
-      document.getElementById("alarm-state").textContent = data.state;
+      document.getElementById("alarm-state").textContent = getAlarmStateLabel(data.state);
     }
   });
 
@@ -121,19 +123,20 @@ function addCameraFeed(data) {
   card.innerHTML = `
     <div class="alarm-camera-header">
       <span class="alarm-camera-dot"></span>
-      <span>${data.cameraName || "Telecamera"}</span>
+      <span class="alarm-camera-name"></span>
     </div>
-    <div class="alarm-camera-feed" id="camera-feed-${data.cameraId}">
+    <div class="alarm-camera-feed">
       <div class="alarm-camera-loading">
         <div class="alarm-camera-loading-spinner"></div>
         <span>Caricamento...</span>
       </div>
     </div>
   `;
+  card.querySelector(".alarm-camera-name").textContent = data.cameraName || "Telecamera";
 
+  const feedContainer = card.querySelector(".alarm-camera-feed");
+  feedContainer.id = `camera-feed-${data.cameraId}`;
   container.appendChild(card);
-
-  const feedContainer = document.getElementById(`camera-feed-${data.cameraId}`);
 
   if (data.useHLS) {
     const video = document.createElement("video");
@@ -158,7 +161,7 @@ function addCameraFeed(data) {
       });
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
-          feedContainer.innerHTML = `<div class="alarm-camera-loading"><span>Errore caricamento</span></div>`;
+          feedContainer.innerHTML = `<div class="alarm-camera-loading"><span>Telecamera non disponibile</span></div>`;
         }
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -168,26 +171,49 @@ function addCameraFeed(data) {
       });
     }
 
-    feedContainer.innerHTML = "";
+    video.style.display = "none";
+    video.addEventListener("playing", () => {
+      feedContainer.querySelector(".alarm-camera-loading")?.remove();
+      video.style.display = "block";
+    }, { once: true });
     feedContainer.appendChild(video);
   } else {
+    // Stream MJPEG continuo invece di uno snapshot ricaricato periodicamente.
+    // L'immagine resta nascosta (con lo spinner visibile) finché non arriva il primo fotogramma
+    const streamUrl = data.url.replace("/api/camera_proxy/", "/api/camera_proxy_stream/");
     const img = document.createElement("img");
-    img.src = data.url;
-    img.alt = data.cameraName || "Telecamera";
+    img.alt = "";
+    img.decoding = "async";
+    img.style.display = "none";
+    const loading = feedContainer.querySelector(".alarm-camera-loading");
+    const loadingText = loading.querySelector("span");
+    let retryCount = 0;
+
+    const load = () => {
+      img.src = `${streamUrl}${streamUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`;
+    };
+    img.onload = () => {
+      retryCount = 0;
+      loading.style.display = "none";
+      img.style.display = "block";
+    };
     img.onerror = () => {
-      feedContainer.innerHTML = `<div class="alarm-camera-loading"><span>Errore caricamento</span></div>`;
+      retryCount++;
+      img.style.display = "none";
+      loading.style.display = "flex";
+      if (retryCount > MJPEG_MAX_RETRIES) {
+        loading.querySelector(".alarm-camera-loading-spinner")?.remove();
+        loadingText.textContent = "Telecamera non disponibile";
+        return;
+      }
+      loadingText.textContent = `Riconnessione (${retryCount})...`;
+      setTimeout(() => {
+        if (img.isConnected) load();
+      }, Math.min(retryCount, 5) * 2000);
     };
 
-    feedContainer.innerHTML = "";
     feedContainer.appendChild(img);
-
-    if (data.url) {
-      setInterval(() => {
-        if (img.parentNode) {
-          img.src = data.url + "&t=" + Date.now();
-        }
-      }, 2000);
-    }
+    load();
   }
 }
 

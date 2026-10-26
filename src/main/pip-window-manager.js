@@ -2,6 +2,8 @@ const { BrowserWindow, ipcMain, screen } = require("electron");
 const path = require("path");
 const appConfig = require("../shared/app-config");
 
+const CLOSE_FALLBACK_MS = 1000;
+
 class PiPWindowManager {
   constructor(settingsManager) {
     this.settingsManager = settingsManager;
@@ -11,6 +13,8 @@ class PiPWindowManager {
     this.windowPositionMap = new Map();
     this.windowSettingsMap = new Map();
     this.pendingCameraIds = new Set();
+    this.windowAnimationTokens = new Map();
+    this.windowOriginalBoundsMap = new Map();
     this.websocketManager = null;
     this.streamPreWarmer = null;
     this.isSystemLocked = false;
@@ -120,9 +124,8 @@ class PiPWindowManager {
           this.windowPositionMap.delete(pipWindow.id);
           this.windowSettingsMap.delete(pipWindow.id);
 
-          if (this.windowOriginalBoundsMap) {
-            this.windowOriginalBoundsMap.delete(pipWindow.id);
-          }
+          this.windowOriginalBoundsMap.delete(pipWindow.id);
+          this.windowAnimationTokens.delete(pipWindow.id);
 
          // Riorganizza le finestre rimanenti
          this.reorganizeWindows();
@@ -143,6 +146,8 @@ class PiPWindowManager {
      }
    }
 
+  // Dimensione della finestra: personalizzata della mappatura, altrimenti quella scelta,
+  // altrimenti la dimensione predefinita delle impostazioni PiP
   getCameraSize(size, cameraSettings = null) {
     if (cameraSettings && cameraSettings.width && cameraSettings.height) {
       return {
@@ -151,7 +156,12 @@ class PiPWindowManager {
       };
     }
 
-    return appConfig.pipSizes[size] || appConfig.pipSizes["medium"];
+    const pipSettings = this.settingsManager.getSettings().pipSettings || {};
+    const effectiveSize = size || pipSettings.size || "medium";
+    if (effectiveSize === "custom" && pipSettings.width && pipSettings.height) {
+      return { width: pipSettings.width, height: pipSettings.height };
+    }
+    return appConfig.pipSizes[effectiveSize] || appConfig.pipSizes["medium"];
   }
 
   calculatePosition(position, windowWidth, windowHeight) {
@@ -231,19 +241,26 @@ class PiPWindowManager {
     return { x, y };
   }
 
+  // Chiude la finestra con l'animazione del renderer; se il renderer non risponde
+  // (es. pagina ancora in caricamento) la finestra viene comunque chiusa
+  requestWindowClose(window) {
+    if (!window || window.isDestroyed()) return;
+    try {
+      if (window.webContents.isLoading()) {
+        window.destroy();
+        return;
+      }
+      window.webContents.send("close-window-anim");
+      setTimeout(() => {
+        if (!window.isDestroyed()) window.destroy();
+      }, CLOSE_FALLBACK_MS);
+    } catch (error) {
+      console.error(`Errore nella chiusura della finestra PiP ${window.id}:`, error);
+    }
+  }
+
   closeAllPiPWindows() {
     const windowsToClose = [...this.pipWindows];
-
-    windowsToClose.forEach((window) => {
-      try {
-        if (window && !window.isDestroyed()) {
-          // Invia il messaggio per l'animazione di chiusura
-          window.webContents.send("close-window-anim");
-        }
-      } catch (error) {
-        console.error(`Errore nella chiusura della finestra PiP ${window?.id}:`, error);
-      }
-    });
 
     // Pulisci le mappe immediatamente (le finestre verranno rimosse quando verrà chiamato l'evento closed)
     this.pipWindows = [];
@@ -251,14 +268,13 @@ class PiPWindowManager {
     this.windowCameraIdMap.clear();
     this.windowPositionMap.clear();
     this.windowSettingsMap.clear();
+
+    windowsToClose.forEach((window) => this.requestWindowClose(window));
   }
 
   closePiPWindow(windowId) {
     const window = this.pipWindows.find((w) => w.id === windowId);
-    if (window && !window.isDestroyed()) {
-      // Invia il messaggio per l'animazione di chiusura
-      window.webContents.send("close-window-anim");
-    }
+    this.requestWindowClose(window);
   }
 
   animateWindowPosition(window, targetX, targetY, duration = 300) {
@@ -268,6 +284,10 @@ class PiPWindowManager {
         return;
       }
 
+      // Una nuova animazione sostituisce quella in corso sulla stessa finestra
+      const token = Symbol("animation");
+      this.windowAnimationTokens.set(window.id, token);
+
       const bounds = window.getBounds();
       const startX = bounds.x;
       const startY = bounds.y;
@@ -276,7 +296,7 @@ class PiPWindowManager {
       const frameInterval = 1000 / frameRate; // ~16.67ms per frame
 
       const animate = () => {
-        if (window.isDestroyed()) {
+        if (window.isDestroyed() || this.windowAnimationTokens.get(window.id) !== token) {
           resolve();
           return;
         }
@@ -301,6 +321,7 @@ class PiPWindowManager {
         if (progress < 1) {
           setTimeout(animate, frameInterval);
         } else {
+          this.windowAnimationTokens.delete(window.id);
           resolve();
         }
       };
@@ -395,8 +416,6 @@ class PiPWindowManager {
         const animationPromise = this.animateWindowPosition(window, x, currentY, 300);
         animationPromises.push(animationPromise);
 
-        console.log(`Finestra ${window.id} in animazione verso (${Math.round(x)}, ${Math.round(currentY)})`);
-
         // Aggiorna currentY per la prossima finestra
         if (direction === 1) {
           currentY += windowHeight + 15; // 15px di spazio tra le finestre
@@ -408,13 +427,12 @@ class PiPWindowManager {
 
     // Attendi che tutte le animazioni siano completate
     await Promise.all(animationPromises);
-    console.log("Tutte le animazioni delle finestre completate");
   }
 
   async handleSensorEvent(eventData) {
     const { entity_id, sensorState, previousState, mapping } = eventData;
 
-    if (!this.isActiveState(sensorState) || (previousState !== "unknown" && !this.isInactiveState(previousState))) {
+    if (!this.isActivation(sensorState, previousState)) {
       return;
     }
 
@@ -423,7 +441,7 @@ class PiPWindowManager {
     }
 
     const settings = this.settingsManager.getSettings();
-    const duration = mapping.duration || settings.pipSettings.defaultDuration;
+    const duration = mapping.duration || settings.pipSettings?.defaultDuration || 10;
 
     if (mapping.cameraId) {
       const existingWindow = this.findWindowByCameraId(mapping.cameraId);
@@ -440,6 +458,18 @@ class PiPWindowManager {
       this.pendingCameraIds.add(mapping.cameraId);
     }
 
+    try {
+      await this.openPiPForMapping(mapping, settings, duration);
+    } catch (error) {
+      console.error(`PiPWindowManager: errore nell'apertura della camera ${mapping.cameraId}:`, error);
+    } finally {
+      if (mapping.cameraId) {
+        this.pendingCameraIds.delete(mapping.cameraId);
+      }
+    }
+  }
+
+  async openPiPForMapping(mapping, settings, duration) {
     let finalCameraUrl = null;
     let cameraName = null;
     let resolvedStreamType = null;
@@ -461,30 +491,26 @@ class PiPWindowManager {
           }
         }
       } else {
-        const cached = this.streamPreWarmer ? this.streamPreWarmer.getCachedUrl(mapping.cameraId) : null;
+        const mappingStreamType = mapping.streamType || "auto";
+        let cached = this.streamPreWarmer ? this.streamPreWarmer.getCachedUrl(mapping.cameraId) : null;
+        // La cache usa l'impostazione globale: ignorala se la mappatura forza un altro tipo di stream
+        if (cached && mappingStreamType !== "auto" && cached.streamType !== mappingStreamType) {
+          cached = null;
+        }
 
         if (cached) {
-          console.log(`PiPWindowManager: URL per ${mapping.cameraId} dalla cache preWarmer`);
           finalCameraUrl = cached.url;
           cameraName = cached.friendlyName;
           resolvedStreamType = cached.streamType;
         } else {
-          if (!this.websocketManager) {
-            this.pendingCameraIds.delete(mapping.cameraId);
-            return;
-          }
+          if (!this.websocketManager) return;
 
-          const mappingStreamType = mapping.streamType || "auto";
           const globalUseHLS = settings.streamingSettings?.useHLS || false;
           const useHLS = mappingStreamType === "hls" ? true :
                           mappingStreamType === "mjpeg" ? false : globalUseHLS;
 
           const cameraResult = await this.websocketManager.getCameraUrlWithToken(mapping.cameraId, settings.homeAssistantUrl, settings.homeAssistantToken, useHLS);
-
-          if (!cameraResult) {
-            this.pendingCameraIds.delete(mapping.cameraId);
-            return;
-          }
+          if (!cameraResult) return;
 
           finalCameraUrl = cameraResult.url;
           cameraName = cameraResult.friendlyName;
@@ -493,21 +519,17 @@ class PiPWindowManager {
       }
     }
 
-    if (!finalCameraUrl) {
-      if (mapping.cameraId) this.pendingCameraIds.delete(mapping.cameraId);
+    if (!finalCameraUrl || this.isSystemLocked) {
       return;
     }
 
-    const cameraSettings = mapping.cameraSettings || {};
+    // Copia: non modificare l'oggetto delle impostazioni salvate
+    const cameraSettings = { ...(mapping.cameraSettings || {}) };
     if (!cameraSettings.position) {
-      cameraSettings.position = settings.pipSettings.position || "top-right";
+      cameraSettings.position = settings.pipSettings?.position || "top-right";
     }
 
-    const result = this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType, mapping.cameraId);
-
-    if (mapping.cameraId) {
-      this.pendingCameraIds.delete(mapping.cameraId);
-    }
+    this.createPiPWindow(finalCameraUrl, cameraSettings, duration, cameraName, resolvedStreamType, mapping.cameraId);
   }
 
   findWindowByCameraUrl(cameraUrl) {
@@ -560,10 +582,7 @@ class PiPWindowManager {
     const globalSettings = this.settingsManager.getSettings();
     const globalPosition = globalSettings.pipSettings?.position || "top-right";
 
-    if (!cameraSettings) {
-      cameraSettings = {};
-    }
-
+    cameraSettings = { ...(cameraSettings || {}) };
     if (!cameraSettings.position) {
       cameraSettings.position = globalPosition;
     }
@@ -662,7 +681,6 @@ class PiPWindowManager {
        const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workArea;
        const currentBounds = pipWindow.getBounds();
 
-       this.windowOriginalBoundsMap = this.windowOriginalBoundsMap || new Map();
        this.windowOriginalBoundsMap.set(pipWindow.id, { ...currentBounds });
 
        pipWindow.setBounds({ x: 0, y: 0, width: screenWidth, height: screenHeight });
@@ -674,7 +692,6 @@ class PiPWindowManager {
        const pipWindow = BrowserWindow.fromWebContents(event.sender);
        if (!pipWindow || pipWindow.isDestroyed()) return;
 
-       this.windowOriginalBoundsMap = this.windowOriginalBoundsMap || new Map();
        const originalBounds = this.windowOriginalBoundsMap.get(pipWindow.id);
 
        if (originalBounds) {
@@ -731,6 +748,11 @@ class PiPWindowManager {
   // Metodo per verificare se il sistema è bloccato
   getSystemLocked() {
     return this.isSystemLocked;
+  }
+
+  // Transizione da stato inattivo (o sconosciuto) ad attivo, es. off -> on
+  isActivation(sensorState, previousState) {
+    return this.isActiveState(sensorState) && (previousState === "unknown" || this.isInactiveState(previousState));
   }
 
   isActiveState(state) {

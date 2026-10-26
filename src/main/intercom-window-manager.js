@@ -58,7 +58,7 @@ class IntercomWindowManager {
     try {
       const { webPreferences, ...windowOptions } = appConfig.intercomWindow || {};
 
-      this.intercomWindow = new BrowserWindow({
+      const intercomWindow = new BrowserWindow({
         width,
         height,
         x,
@@ -71,8 +71,9 @@ class IntercomWindowManager {
         ...windowOptions,
         webPreferences,
       });
+      this.intercomWindow = intercomWindow;
 
-      this.intercomWindow.setAlwaysOnTop(true, "screen-saver");
+      intercomWindow.setAlwaysOnTop(true, "screen-saver");
 
       this.intercomWindow.loadFile(path.join(__dirname, "..", "..", appConfig.paths.intercomWindowHtml));
 
@@ -89,7 +90,9 @@ class IntercomWindowManager {
         this.startAutoCloseTimer();
       });
 
-      this.intercomWindow.on("closed", () => {
+      intercomWindow.on("closed", () => {
+        // Una finestra chiusa in ritardo non deve azzerare quella aperta nel frattempo
+        if (this.intercomWindow !== intercomWindow) return;
         this.intercomWindow = null;
         this.pendingCameraStream = null;
         this.clearAutoCloseTimer();
@@ -98,6 +101,15 @@ class IntercomWindowManager {
       console.error("Errore nella creazione della finestra citofono:", error);
       this.intercomWindow = null;
       this.clearAutoCloseTimer();
+    }
+  }
+
+  // Invia lo stream della telecamera al popup già aperto (risolto in modo asincrono)
+  setCameraStream(cameraStream) {
+    if (!cameraStream) return;
+    this.pendingCameraStream = cameraStream;
+    if (this.intercomWindow && !this.intercomWindow.isDestroyed() && !this.intercomWindow.webContents.isLoading()) {
+      this.intercomWindow.webContents.send("intercom-camera", cameraStream);
     }
   }
 

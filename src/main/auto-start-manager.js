@@ -36,7 +36,6 @@ class AutoStartManager {
     try {
       app.setLoginItemSettings({
         openAtLogin: enabled,
-        openAsHidden: enabled,
         path: process.execPath,
         args: ["--autostart"]
       });
@@ -67,7 +66,8 @@ class AutoStartManager {
           fs.mkdirSync(autostartDir, { recursive: true });
         }
 
-        const execPath = process.execPath;
+        // In un AppImage process.execPath punta al mount temporaneo, che cambia a ogni avvio
+        const execPath = process.env.APPIMAGE || process.execPath;
         const appPath = app.getAppPath();
         let iconPath = path.join(path.dirname(execPath), "resources", "icon.png");
 
@@ -92,7 +92,7 @@ class AutoStartManager {
 Type=Application
 Name=HomeSentinel
 Comment=Home Assistant Camera Monitor
-Exec=${execPath} --autostart
+Exec="${execPath}" --autostart
 TryExec=${execPath}
 Icon=${iconPath}
 Terminal=false
@@ -135,9 +135,8 @@ X-MATE-Autostart-enabled=true
     const autoStart = settings.autoStart || false;
 
     const currentStatus = await this.isAutoStartEnabled();
-    if (currentStatus !== autoStart) {
-      await this.setAutoStart(autoStart);
-    } else if (autoStart) {
+    // Se attivo viene sempre riscritto, così il percorso dell'eseguibile resta aggiornato dopo un update
+    if (currentStatus !== autoStart || autoStart) {
       await this.setAutoStart(autoStart);
     }
   }

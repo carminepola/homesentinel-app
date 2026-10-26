@@ -17,6 +17,10 @@ class DndScheduler {
       return;
     }
     this.lastInWindow = this._isInWindow(new Date());
+    // Se l'app parte (o la pianificazione viene salvata) dentro la fascia oraria, attiva subito il DnD
+    if (this.lastInWindow && this.trayManager && !this.trayManager.getDndMode()) {
+      this.trayManager.setDndMode(true);
+    }
     this.timer = setInterval(() => this._tick(), 20000);
   }
 

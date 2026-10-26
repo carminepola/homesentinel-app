@@ -11,10 +11,15 @@ const defaultSettings = {
     days: [false, false, false, false, false, false, false],
   },
   sensorCameraMappings: [],
+  // Telecamere esterne a Home Assistant: { id: "custom_...", name, url, streamType: "auto" | "mjpeg" | "hls" | "mp4" }
+  customCameras: [],
   pipSettings: {
     defaultDuration: 10,
     position: "top-right",
     size: "medium",
+    // Usate quando size è "custom"
+    width: 320,
+    height: 240,
     margins: {
       top: 20,
       right: 20,

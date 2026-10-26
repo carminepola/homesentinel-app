@@ -149,6 +149,9 @@
       let isDragging = false;
       let lastScreenX = 0;
       let lastScreenY = 0;
+      let pendingDeltaX = 0;
+      let pendingDeltaY = 0;
+      let dragFrame = null;
 
       ipcRenderer.on("refresh-stream", (event, config) => {
         if (config && config.url) {
@@ -326,17 +329,24 @@
           pipVideo.muted = isMuted;
           updateMuteButton();
 
+          if (window.hlsInstance) {
+            window.hlsInstance.destroy();
+            window.hlsInstance = null;
+          }
+
           if (Hls.isSupported()) {
-            console.log("HLS.js supportato, inizializzazione...");
             const hls = new Hls({
               debug: false,
               enableWorker: true,
               lowLatencyMode: true,
-              backBufferLength: 3,
-              maxBufferLength: 5,
+              backBufferLength: 5,
+              maxBufferLength: 6,
               maxMaxBufferLength: 15,
-              liveSyncDurationCount: 1,
-              liveMaxLatencyDurationCount: 3,
+              // Un segmento di margine evita i continui stalli; il ritardo accumulato
+              // viene recuperato accelerando leggermente invece di saltare in avanti
+              liveSyncDurationCount: 2,
+              liveMaxLatencyDurationCount: 5,
+              maxLiveSyncPlaybackRate: 1.5,
               startLevel: 0,
               startFragPrefetch: true,
               abrEwmaDefaultEstimate: 500000,
@@ -592,18 +602,32 @@
         moveBtn.classList.add("active");
       }
 
+      // Gli spostamenti vengono accumulati e inviati al massimo una volta per frame
+      function flushDragMove() {
+        dragFrame = null;
+        if (pendingDeltaX === 0 && pendingDeltaY === 0) return;
+        ipcRenderer.send("move-pip-window", { deltaX: pendingDeltaX, deltaY: pendingDeltaY });
+        pendingDeltaX = 0;
+        pendingDeltaY = 0;
+      }
+
       function onDragMove(e) {
         if (!isDragging) return;
-        const deltaX = e.screenX - lastScreenX;
-        const deltaY = e.screenY - lastScreenY;
+        pendingDeltaX += e.screenX - lastScreenX;
+        pendingDeltaY += e.screenY - lastScreenY;
         lastScreenX = e.screenX;
         lastScreenY = e.screenY;
-        if (deltaX === 0 && deltaY === 0) return;
-        ipcRenderer.send("move-pip-window", { deltaX, deltaY });
+        if (!dragFrame) {
+          dragFrame = requestAnimationFrame(flushDragMove);
+        }
       }
 
       function onDragEnd() {
         if (!isDragging) return;
+        if (dragFrame) {
+          cancelAnimationFrame(dragFrame);
+          flushDragMove();
+        }
         isDragging = false;
         pipContainer.classList.remove("dragging");
         moveBtn.classList.remove("active");
@@ -673,15 +697,28 @@
           window.hlsInstance = null;
         }
 
+        if (mjpegRetryTimeout) {
+          clearTimeout(mjpegRetryTimeout);
+          mjpegRetryTimeout = null;
+        }
+
         if (pipVideo) {
           pipVideo.pause();
-          pipVideo.src = "";
+          pipVideo.removeAttribute("src");
+          pipVideo.load();
         }
+
+        // Libera subito la connessione MJPEG (Chromium ne consente poche per host)
+        mjpegStream.onerror = null;
+        mjpegStream.removeAttribute("src");
 
         window.close();
       }
 
+      let isClosing = false;
       function animateWindowClose() {
+        if (isClosing) return;
+        isClosing = true;
         const duration = 200;
         pipContainer.style.transition = `transform ${duration}ms cubic-bezier(0.4, 0, 1, 1), opacity ${duration}ms cubic-bezier(0.4, 0, 1, 1)`;
         pipContainer.style.transform = "scale(0.85)";

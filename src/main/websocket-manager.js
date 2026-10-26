@@ -1,16 +1,22 @@
 const WebSocket = require("ws");
 const appConfig = require("../shared/app-config");
 
+const ACTIVE_INTERCOM_STATES = ["on", "true", "1"];
+const OPEN_LOCK_STATES = ["unlocked", "open", "on"];
+
 class WebSocketManager {
   constructor(settingsManager) {
     this.settingsManager = settingsManager;
     this.wsConnection = null;
-    this.isReconnecting = false;
+    this.isAuthenticated = false;
     this.reconnectTimeout = null;
+    this.reconnectAttempts = 0;
+    this.lastCloseReason = null;
     this.heartbeatInterval = null;
     this.sensorStates = new Map();
     this.subscriptionIds = new Map();
-    this.subscriptionCounter = Date.now();
+    this.pendingRequests = new Map();
+    this.subscriptionCounter = 1;
 
     this.onSensorEvent = null;
     this.onConnectionStatusChange = null;
@@ -29,6 +35,16 @@ class WebSocketManager {
     this.onGateLockOpened = callbacks.onGateLockOpened || null;
   }
 
+  // URL base di Home Assistant senza slash finale
+  getBaseUrl(url = null) {
+    const source = url || this.settingsManager.getSettings().homeAssistantUrl || "";
+    return source.trim().replace(/\/+$/, "");
+  }
+
+  isConnected() {
+    return !!(this.isAuthenticated && this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN);
+  }
+
   connectToHomeAssistant() {
     const settings = this.settingsManager.getSettings();
 
@@ -37,117 +53,192 @@ class WebSocketManager {
       return;
     }
 
-    if (this.isReconnecting || (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN)) {
+    if (this.wsConnection &&
+        (this.wsConnection.readyState === WebSocket.OPEN || this.wsConnection.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
-    const baseUrl = settings.homeAssistantUrl.replace(/\/$/, "");
-    const wsUrl = baseUrl.replace(/^http:/, "ws:").replace(/^https:/, "wss:") + "/api/websocket";
+    this.clearReconnectTimeout();
+    this.disposeSocket();
 
+    const wsUrl = this.getBaseUrl().replace(/^http:/, "ws:").replace(/^https:/, "wss:") + "/api/websocket";
+
+    let ws;
     try {
-      if (this.wsConnection) {
-        this.wsConnection.close();
-      }
-
-      this.isReconnecting = true;
-      this.wsConnection = new WebSocket(wsUrl);
-
-      this.wsConnection.on("open", () => {
-        const ts = new Date().toISOString();
-        console.log(`[${ts}] [DEBUG] WS open: connessione stabilita, invio auth`);
-        this.isReconnecting = false;
-        this.clearReconnectTimeout();
-        this.wsConnection.send(JSON.stringify({
-          type: "auth",
-          access_token: settings.homeAssistantToken,
-        }));
-      });
-
-      this.wsConnection.on("message", (data) => {
-        this.handleMessage(data);
-      });
-
-      this.wsConnection.on("close", (code) => {
-        const ts = new Date().toISOString();
-        console.log(`[${ts}] [DEBUG] WS close: code=${code}, isReconnecting=${this.isReconnecting}`);
-        this.handleConnectionClose(code);
-      });
-
-      this.wsConnection.on("error", (error) => {
-        const ts = new Date().toISOString();
-        console.error(`[${ts}] [DEBUG] WS error: ${error.message}, isReconnecting=${this.isReconnecting}`);
-        this.isReconnecting = false;
+      ws = new WebSocket(wsUrl, {
+        handshakeTimeout: appConfig.websocket.handshakeTimeout,
+        perMessageDeflate: false,
       });
     } catch (error) {
-      console.error("Errore di connessione:", error);
-      this.isReconnecting = false;
+      console.error("Errore di connessione:", error.message);
+      this.scheduleReconnect();
+      return;
     }
+
+    this.wsConnection = ws;
+    this.isAuthenticated = false;
+
+    // Gli handler ignorano gli eventi di socket non più correnti (es. dopo un force reconnect)
+    ws.on("open", () => {
+      if (ws !== this.wsConnection) return;
+      console.log(`[${new Date().toISOString()}] WS open: invio auth`);
+      ws.send(JSON.stringify({
+        type: "auth",
+        access_token: this.settingsManager.getSettings().homeAssistantToken,
+      }));
+    });
+
+    ws.on("message", (data) => {
+      if (ws !== this.wsConnection) return;
+      this.handleMessage(data);
+    });
+
+    ws.on("close", (code) => {
+      if (ws !== this.wsConnection) return;
+      console.log(`[${new Date().toISOString()}] WS close: code=${code}`);
+      this.handleConnectionClose();
+    });
+
+    ws.on("error", (error) => {
+      console.error(`[${new Date().toISOString()}] WS error: ${error.message}`);
+    });
   }
 
   handleMessage(data) {
+    let message;
     try {
-      const message = JSON.parse(data);
-
-      switch (message.type) {
-        case "auth_ok":
-          this.subscribeToStateChanges();
-          break;
-        case "event":
-          this.handleSensorEvent(message);
-          break;
-        case "auth_invalid":
-          console.error("Autenticazione fallita");
-          this.wsConnection.close();
-          break;
-        case "result":
-          this.handleResultMessage(message);
-          break;
-        case "pong":
-          // Pong received, connection is stable
-          break;
-      }
+      message = JSON.parse(data);
     } catch (error) {
       console.error("Errore nel parsing del messaggio:", error);
+      return;
     }
+
+    // Home Assistant può raggruppare più messaggi in un array (coalesce_messages)
+    const messages = Array.isArray(message) ? message : [message];
+    for (const msg of messages) {
+      try {
+        this.dispatchMessage(msg);
+      } catch (error) {
+        console.error("Errore nella gestione del messaggio:", error);
+      }
+    }
+  }
+
+  dispatchMessage(message) {
+    switch (message.type) {
+      case "auth_required":
+        break;
+      case "auth_ok":
+        this.handleAuthOk();
+        break;
+      case "auth_invalid":
+        console.error("Autenticazione fallita: token non valido");
+        this.lastCloseReason = "auth_invalid";
+        this.wsConnection.close();
+        break;
+      case "event":
+        this.handleSensorEvent(message);
+        break;
+      case "result":
+      case "pong":
+        this.resolvePendingRequest(message);
+        break;
+    }
+  }
+
+  handleAuthOk() {
+    this.isAuthenticated = true;
+    this.reconnectAttempts = 0;
+    this.lastCloseReason = null;
+    this.startHeartbeat();
+
+    if (this.onConnectionStatusChange) {
+      this.onConnectionStatusChange(true);
+    }
+
+    this.subscribeToStateChanges();
+    this.fetchInitialAlarmState();
+  }
+
+  // Invia una richiesta e attende il messaggio di risposta con lo stesso id
+  sendRequest(payload, timeoutMs = appConfig.websocket.requestTimeout) {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected()) {
+        reject(new Error("WebSocket non connesso"));
+        return;
+      }
+
+      const id = this.getNextSubscriptionId();
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error("timeout"));
+      }, timeoutMs);
+
+      this.pendingRequests.set(id, { resolve, reject, timer });
+
+      try {
+        this.wsConnection.send(JSON.stringify({ ...payload, id }));
+      } catch (error) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(id);
+        reject(error);
+      }
+    });
+  }
+
+  resolvePendingRequest(message) {
+    if (message.type === "result" && this.subscriptionIds.has(message.id) && !message.success) {
+      console.error("Sottoscrizione rifiutata:", message.error?.message);
+      this.subscriptionIds.delete(message.id);
+    }
+
+    const pending = this.pendingRequests.get(message.id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingRequests.delete(message.id);
+    pending.resolve(message);
+  }
+
+  rejectAllPendingRequests(reason) {
+    for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(reason));
+    }
+    this.pendingRequests.clear();
+  }
+
+  needsStateSubscription() {
+    const settings = this.settingsManager.getSettings();
+    const hasMappings = settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0;
+    const alarmEnabled = settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId;
+    const hasGate = !!(settings.gateSettings?.intercomSensorId || settings.gateSettings?.gateLockId);
+    return !!(hasMappings || alarmEnabled || hasGate);
+  }
+
+  getStateSubscriptionId() {
+    for (const [id, type] of this.subscriptionIds.entries()) {
+      if (type === "state_changed") return id;
+    }
+    return null;
   }
 
   subscribeToStateChanges() {
-    const settings = this.settingsManager.getSettings();
-
-    const hasGate = !!(settings.gateSettings?.intercomSensorId || settings.gateSettings?.gateLockId);
-    if (settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0 ||
-        (settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId) ||
-        hasGate) {
-      setTimeout(() => {
-        const subscriptionId = this.getNextSubscriptionId();
-        const message = {
-          id: subscriptionId,
-          type: "subscribe_events",
-          event_type: "state_changed",
-        };
-
-        this.wsConnection.send(JSON.stringify(message));
-        this.subscriptionIds.set(subscriptionId, "state_changed");
-      }, 100);
+    if (!this.isConnected() || !this.needsStateSubscription() || this.getStateSubscriptionId() !== null) {
+      return;
     }
-  }
 
-  handleResultMessage(message) {
-    if (message.success && this.subscriptionIds.has(message.id)) {
-      const subscriptionType = this.subscriptionIds.get(message.id);
-      if (subscriptionType === "state_changed") {
-        this.startHeartbeat();
-        if (this.onConnectionStatusChange) {
-          this.onConnectionStatusChange(true);
-        }
-        this.fetchInitialAlarmState();
-      }
-    }
+    const subscriptionId = this.getNextSubscriptionId();
+    this.subscriptionIds.set(subscriptionId, "state_changed");
+    this.wsConnection.send(JSON.stringify({
+      id: subscriptionId,
+      type: "subscribe_events",
+      event_type: "state_changed",
+    }));
   }
 
   handleSensorEvent(message) {
     const { event } = message;
-    if (!event || event.event_type !== "state_changed") {
+    if (!event || event.event_type !== "state_changed" || !event.data) {
       return;
     }
 
@@ -157,131 +248,171 @@ class WebSocketManager {
     }
 
     const settings = this.settingsManager.getSettings();
+    const mapping = settings.sensorCameraMappings?.find((m) => m.sensorId === entity_id);
+    const alarmSettings = settings.alarmSettings || {};
+    const gateSettings = settings.gateSettings || {};
+    const isAlarmEntity = alarmSettings.enabled && alarmSettings.sensorId === entity_id;
+    const isIntercom = gateSettings.intercomSensorId && entity_id === gateSettings.intercomSensorId;
+    const isGateLock = gateSettings.gateLockId && entity_id === gateSettings.gateLockId;
+
+    // La sottoscrizione riceve tutte le entità: scarta subito quelle non rilevanti
+    if (!mapping && !isAlarmEntity && !isIntercom && !isGateLock) {
+      return;
+    }
+
     const sensorState = new_state?.state || "unknown";
     const previousState = old_state?.state || "unknown";
+    const friendlyName = new_state?.attributes?.friendly_name || old_state?.attributes?.friendly_name || entity_id;
     this.sensorStates.set(entity_id, sensorState);
 
-    if (entity_id.startsWith("alarm_control_panel.")) {
-      const alarmSettings = settings.alarmSettings || {};
-      if (alarmSettings.enabled && alarmSettings.sensorId === entity_id) {
-        const friendlyName = new_state?.attributes?.friendly_name || entity_id;
+    if (isAlarmEntity) {
+      const alarmData = { entity_id, sensorState, previousState, sensorName: friendlyName };
 
-        if (this.onAlarmStateChange) {
-          this.onAlarmStateChange({
-            entity_id,
-            sensorState,
-            previousState,
-            sensorName: friendlyName,
-          });
-        }
+      if (this.onAlarmStateChange) {
+        this.onAlarmStateChange(alarmData);
+      }
 
-        if (sensorState.toLowerCase() === "triggered") {
-          if (this.onAlarmEvent) {
-            this.onAlarmEvent({
-              entity_id,
-              sensorState,
-              previousState,
-              sensorName: friendlyName,
-            });
-          }
-        } else if (this.onAlarmEvent && previousState?.toLowerCase() === "triggered") {
-          this.onAlarmEvent({
-            entity_id,
-            sensorState,
-            previousState,
-            sensorName: friendlyName,
-            dismissed: true,
-          });
-        }
+      if (sensorState.toLowerCase() === "triggered") {
+        if (this.onAlarmEvent) this.onAlarmEvent(alarmData);
+      } else if (this.onAlarmEvent && previousState.toLowerCase() === "triggered") {
+        this.onAlarmEvent({ ...alarmData, dismissed: true });
       }
     }
 
-    const mapping = settings.sensorCameraMappings?.find((m) => m.sensorId === entity_id);
-
     // Rilevamento citofono: notifica quando il sensore associato passa a "on"
-    const gateSettings = settings.gateSettings;
-    if (gateSettings?.intercomSensorId && entity_id === gateSettings.intercomSensorId) {
-      const isOn = ["on", "true", "1"].includes((sensorState || "").toLowerCase());
-      const wasOn = ["on", "true", "1"].includes((previousState || "").toLowerCase());
+    if (isIntercom) {
+      const isOn = ACTIVE_INTERCOM_STATES.includes(sensorState.toLowerCase());
+      const wasOn = ACTIVE_INTERCOM_STATES.includes(previousState.toLowerCase());
       if (isOn && !wasOn && this.onIntercomEvent) {
-        this.onIntercomEvent({ entity_id, sensorState });
+        this.onIntercomEvent({ entity_id, sensorState, friendlyName });
       }
     }
 
     // Rilevamento apertura cancello: il lucchetto passa a "unlocked"
-    if (gateSettings?.gateLockId && entity_id === gateSettings.gateLockId) {
-      const isOpen = ["unlocked", "open", "on"].includes((sensorState || "").toLowerCase());
-      const wasOpen = ["unlocked", "open", "on"].includes((previousState || "").toLowerCase());
+    if (isGateLock) {
+      const isOpen = OPEN_LOCK_STATES.includes(sensorState.toLowerCase());
+      const wasOpen = OPEN_LOCK_STATES.includes(previousState.toLowerCase());
       if (isOpen && !wasOpen && this.onGateLockOpened) {
-        this.onGateLockOpened({ entity_id, sensorState, previousState });
+        this.onGateLockOpened({ entity_id, sensorState, previousState, friendlyName });
       }
     }
 
-    if (!mapping) {
-      return;
-    }
-
-    if (this.onSensorEvent) {
+    if (mapping && this.onSensorEvent) {
       this.onSensorEvent({
         entity_id,
         sensorState,
         previousState,
+        friendlyName,
         mapping,
       });
     }
   }
 
-  handleConnectionClose(code) {
+  handleConnectionClose() {
+    const wasAuthenticated = this.isAuthenticated;
+    this.isAuthenticated = false;
     this.subscriptionIds.clear();
     this.stopHeartbeat();
+    this.rejectAllPendingRequests("WebSocket chiusa");
+    this.wsConnection = null;
 
-    if (this.onConnectionStatusChange) {
+    if (wasAuthenticated && this.onConnectionStatusChange) {
       this.onConnectionStatusChange(false);
     }
 
     this.scheduleReconnect();
   }
 
+  // Backoff esponenziale con jitter: evita di martellare Home Assistant quando è giù
+  getReconnectDelay() {
+    const { reconnectDelay, maxReconnectDelay, authFailedReconnectDelay } = appConfig.websocket;
+    if (this.lastCloseReason === "auth_invalid") {
+      return authFailedReconnectDelay;
+    }
+    const exponential = Math.min(maxReconnectDelay, reconnectDelay * Math.pow(2, this.reconnectAttempts));
+    const jitter = Math.random() * 0.3 * exponential;
+    return Math.round(exponential + jitter);
+  }
+
   scheduleReconnect() {
     this.clearReconnectTimeout();
-    this.isReconnecting = false;
+
+    const delay = this.getReconnectDelay();
+    this.reconnectAttempts++;
+    console.log(`WS: nuovo tentativo di connessione tra ${Math.round(delay / 1000)}s (tentativo ${this.reconnectAttempts})`);
 
     this.reconnectTimeout = setTimeout(() => {
-      this.isReconnecting = false;
+      this.reconnectTimeout = null;
       this.connectToHomeAssistant();
-    }, appConfig.websocket.reconnectDelay);
+    }, delay);
   }
 
   forceReconnect() {
+    const wasAuthenticated = this.isAuthenticated;
     this.clearReconnectTimeout();
-    this.stopHeartbeat();
-    this.isReconnecting = false;
+    this.disposeSocket();
+    this.reconnectAttempts = 0;
+    this.lastCloseReason = null;
 
-    if (this.wsConnection) {
-      try {
-        this.wsConnection.removeAllListeners();
-        if (this.wsConnection.readyState === WebSocket.OPEN || this.wsConnection.readyState === WebSocket.CONNECTING) {
-          this.wsConnection.close(1000, "Force reconnect");
-        }
-      } catch (error) {
-        console.error("Errore durante force reconnect:", error);
-      }
-      this.wsConnection = null;
+    if (wasAuthenticated && this.onConnectionStatusChange) {
+      this.onConnectionStatusChange(false);
     }
 
-    this.subscriptionIds.clear();
     this.connectToHomeAssistant();
   }
 
+  // Verifica che la connessione sia ancora viva (es. dopo sospensione/sblocco):
+  // se risponde al ping viene mantenuta, altrimenti viene ricreata subito
+  async checkConnection() {
+    if (!this.isConnected()) {
+      this.forceReconnect();
+      return;
+    }
+    try {
+      await this.sendRequest({ type: "ping" }, appConfig.websocket.wakeCheckTimeout);
+    } catch (error) {
+      console.warn(`WS: connessione non valida dopo il risveglio (${error.message}), riconnessione`);
+      this.forceReconnect();
+    }
+  }
+
+  // Chiude la socket corrente senza innescare la logica di riconnessione
+  disposeSocket() {
+    this.stopHeartbeat();
+    this.isAuthenticated = false;
+    this.subscriptionIds.clear();
+    this.rejectAllPendingRequests("WebSocket chiusa");
+
+    const ws = this.wsConnection;
+    this.wsConnection = null;
+    if (!ws) return;
+
+    try {
+      ws.removeAllListeners();
+      // Evita eccezioni non gestite da errori emessi dopo la rimozione dei listener
+      ws.on("error", () => {});
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1000);
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        ws.terminate();
+      }
+    } catch (error) {
+      console.error("Errore durante la chiusura della WebSocket:", error.message);
+    }
+  }
+
+  // Heartbeat applicativo: se Home Assistant non risponde al ping la connessione
+  // è considerata morta (es. cambio rete, Wi-Fi caduto) e viene ricreata subito
   startHeartbeat() {
     this.stopHeartbeat();
     this.heartbeatInterval = setInterval(() => {
-      if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
-        this.wsConnection.send(JSON.stringify({
-          id: this.getNextSubscriptionId(),
-          type: "ping"
-        }));
-      }
+      if (!this.isConnected()) return;
+      const ws = this.wsConnection;
+      this.sendRequest({ type: "ping" }, appConfig.websocket.pongTimeout).catch((error) => {
+        if (ws !== this.wsConnection || error.message !== "timeout") return;
+        console.warn(`[${new Date().toISOString()}] WS: pong non ricevuto, connessione considerata persa`);
+        ws.terminate();
+      });
     }, appConfig.websocket.heartbeatInterval);
   }
 
@@ -300,40 +431,20 @@ class WebSocketManager {
   }
 
   updateSubscriptions() {
-    if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
+    if (!this.isConnected()) {
       return;
     }
 
-    const settings = this.settingsManager.getSettings();
-    const hasMappings = settings.sensorCameraMappings && settings.sensorCameraMappings.length > 0;
-    const alarmEnabled = settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId;
-    const hasGate = !!(settings.gateSettings?.intercomSensorId || settings.gateSettings?.gateLockId);
-    const needsSubscription = hasMappings || alarmEnabled || hasGate;
-    const isSubscribed = Array.from(this.subscriptionIds.values()).includes("state_changed");
+    const needsSubscription = this.needsStateSubscription();
+    const stateChangedSubscriptionId = this.getStateSubscriptionId();
 
-    if (needsSubscription && !isSubscribed) {
-      const subscriptionId = this.getNextSubscriptionId();
-      const message = {
-        id: subscriptionId,
-        type: "subscribe_events",
-        event_type: "state_changed",
-      };
-
-      this.wsConnection.send(JSON.stringify(message));
-      this.subscriptionIds.set(subscriptionId, "state_changed");
-    } else if (!needsSubscription && isSubscribed) {
-      const stateChangedSubscriptionId = Array.from(this.subscriptionIds.entries())
-        .find(([id, type]) => type === "state_changed")?.[0];
-      
-      if (stateChangedSubscriptionId) {
-        const message = {
-          id: this.getNextSubscriptionId(),
-          type: "unsubscribe_events",
-        };
-
-        this.wsConnection.send(JSON.stringify(message));
-        this.subscriptionIds.delete(stateChangedSubscriptionId);
-      }
+    if (needsSubscription && stateChangedSubscriptionId === null) {
+      this.subscribeToStateChanges();
+    } else if (!needsSubscription && stateChangedSubscriptionId !== null) {
+      this.subscriptionIds.delete(stateChangedSubscriptionId);
+      this.sendRequest({ type: "unsubscribe_events", subscription: stateChangedSubscriptionId }).catch((error) => {
+        console.warn("Errore nell'annullamento della sottoscrizione:", error.message);
+      });
     }
   }
 
@@ -348,6 +459,18 @@ class WebSocketManager {
     return this.sensorStates.get(sensorId) || null;
   }
 
+  async fetchState(entityId, baseUrl, token) {
+    const response = await fetch(`${baseUrl}/api/states/${entityId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(appConfig.websocket.httpTimeout),
+    });
+    if (!response.ok) return null;
+    return response.json();
+  }
+
   async fetchInitialAlarmState() {
     const settings = this.settingsManager.getSettings();
     const sensorId = settings.alarmSettings?.sensorId;
@@ -355,25 +478,16 @@ class WebSocketManager {
       return;
     }
     try {
-      const response = await fetch(
-        `${settings.homeAssistantUrl.replace(/\/$/, "")}/api/states/${sensorId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${settings.homeAssistantToken}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      if (!response.ok) return;
-      const stateObj = await response.json();
-      const state = stateObj?.state || "unknown";
+      const stateObj = await this.fetchState(sensorId, this.getBaseUrl(), settings.homeAssistantToken);
+      if (!stateObj) return;
+      const state = stateObj.state || "unknown";
       this.sensorStates.set(sensorId, state);
       if (this.onAlarmStateChange) {
         this.onAlarmStateChange({
           entity_id: sensorId,
           sensorState: state,
           previousState: state,
-          sensorName: stateObj?.attributes?.friendly_name || sensorId,
+          sensorName: stateObj.attributes?.friendly_name || sensorId,
         });
       }
     } catch (error) {
@@ -386,125 +500,61 @@ class WebSocketManager {
       return null;
     }
 
-    try {
-      const response = await fetch(`${homeAssistantUrl}/api/states/${cameraId}`, {
-        headers: {
-          Authorization: `Bearer ${homeAssistantToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+    const baseUrl = this.getBaseUrl(homeAssistantUrl);
 
-      if (!response.ok) {
+    // La richiesta HLS parte in parallelo alla lettura dello stato per ridurre la latenza
+    const hlsPromise = useHLS
+      ? this.getHlsStreamUrl(cameraId, baseUrl).catch((hlsError) => {
+          console.warn(`HLS non disponibile per ${cameraId} (${hlsError.message}), fallback a MJPEG`);
+          return null;
+        })
+      : null;
+
+    try {
+      const cameraState = await this.fetchState(cameraId, baseUrl, homeAssistantToken);
+      if (!cameraState) {
         return null;
       }
 
-      const cameraState = await response.json();
       const friendlyName = cameraState.attributes?.friendly_name || cameraId;
 
-      // Se HLS è abilitato, prova prima l'API WebSocket per ottenere l'URL HLS
-      // Se fallisce, fallback a MJPEG
       let mjpegUrl;
       if (cameraState.attributes?.entity_picture) {
-        mjpegUrl = `${homeAssistantUrl}${cameraState.attributes.entity_picture}`;
+        mjpegUrl = `${baseUrl}${cameraState.attributes.entity_picture}`;
       } else if (cameraState.attributes?.access_token) {
-        mjpegUrl = `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${cameraState.attributes.access_token}`;
+        mjpegUrl = `${baseUrl}/api/camera_proxy_stream/${cameraId}?token=${cameraState.attributes.access_token}`;
       } else {
-        mjpegUrl = `${homeAssistantUrl}/api/camera_proxy_stream/${cameraId}?token=${homeAssistantToken}`;
+        mjpegUrl = `${baseUrl}/api/camera_proxy_stream/${cameraId}?token=${homeAssistantToken}`;
       }
 
-      if (useHLS) {
-        try {
-          const hlsUrl = await this.getHlsStreamUrl(cameraId, homeAssistantUrl);
-          if (hlsUrl) {
-            return { url: hlsUrl, friendlyName, streamType: "hls", mjpegUrl };
-          }
-          
-          console.log(`HLS non disponibile per ${cameraId}, fallback a MJPEG`);
-        } catch (hlsError) {
-          console.warn(`Errore nell'ottenere l'URL HLS per ${cameraId}:`, hlsError.message);
-          console.log(`Fallback a MJPEG per ${cameraId}`);
+      if (hlsPromise) {
+        const hlsUrl = await hlsPromise;
+        if (hlsUrl) {
+          return { url: hlsUrl, friendlyName, streamType: "hls", mjpegUrl };
         }
       }
 
       return { url: mjpegUrl, friendlyName, streamType: "mjpeg" };
     } catch (error) {
-      console.error(`Errore nell'ottenere l'URL della camera ${cameraId}:`, error);
+      console.error(`Errore nell'ottenere l'URL della camera ${cameraId}:`, error.message);
       return null;
     }
   }
 
   async getHlsStreamUrl(cameraId, homeAssistantUrl) {
-    return new Promise((resolve, reject) => {
-      if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
-        reject(new Error("WebSocket non connesso"));
-        return;
-      }
-
-      const requestId = this.getNextSubscriptionId();
-      const timeout = setTimeout(() => {
-        reject(new Error("Timeout nella richiesta HLS"));
-      }, appConfig.hls.timeout);
-
-      // Listener per la risposta
-      const messageHandler = (data) => {
-        try {
-          const message = JSON.parse(data);
-
-          if (message.id === requestId && message.type === "result") {
-            clearTimeout(timeout);
-            this.wsConnection.removeListener("message", messageHandler);
-
-            if (message.success && message.result && message.result.url) {
-              // Costruisci l'URL completo
-              const hlsUrl = `${homeAssistantUrl}${message.result.url}`;
-              console.log(`URL HLS ottenuto: ${hlsUrl}`);
-              resolve(hlsUrl);
-            } else {
-              // HLS non supportato per questa camera
-              console.warn(`HLS non supportato per camera ${cameraId}`);
-              reject(new Error("HLS non supportato"));
-            }
-          }
-        } catch (error) {
-          console.error("Errore nel parsing della risposta HLS:", error);
-          reject(error);
-        }
-      };
-
-      this.wsConnection.on("message", messageHandler);
-
-      // Invia la richiesta per ottenere l'URL HLS
-      const request = {
-        id: requestId,
-        type: "camera/stream",
-        entity_id: cameraId,
-      };
-
-      console.log(`Invio richiesta HLS per camera ${cameraId}:`, request);
-      this.wsConnection.send(JSON.stringify(request));
-    });
+    const message = await this.sendRequest({ type: "camera/stream", entity_id: cameraId }, appConfig.hls.timeout);
+    if (message.success && message.result && message.result.url) {
+      return `${this.getBaseUrl(homeAssistantUrl)}${message.result.url}`;
+    }
+    throw new Error(message.error?.message || "HLS non supportato");
   }
 
   closeConnection() {
     this.clearReconnectTimeout();
-    this.stopHeartbeat();
-
-    if (this.wsConnection) {
-      try {
-        this.wsConnection.removeAllListeners();
-        if (this.wsConnection.readyState === WebSocket.OPEN || this.wsConnection.readyState === WebSocket.CONNECTING) {
-          this.wsConnection.close(1000, "Applicazione in chiusura");
-        }
-      } catch (error) {
-        console.error("Errore durante la chiusura della WebSocket:", error);
-      } finally {
-        this.wsConnection = null;
-      }
-    }
-
+    this.disposeSocket();
     this.sensorStates.clear();
-    this.subscriptionIds.clear();
-    this.isReconnecting = false;
+    this.reconnectAttempts = 0;
+    this.lastCloseReason = null;
   }
 
   getNextSubscriptionId() {
@@ -512,56 +562,26 @@ class WebSocketManager {
   }
 
   async callService(domain, service, serviceData = {}) {
-    if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
-      console.error(`[WS-LOG] callService FALLEN: ws non connesso (readyState=${this.wsConnection?.readyState})`);
+    if (!this.isConnected()) {
+      console.error("callService: WebSocket non connesso");
       return { success: false, error: "WebSocket non connesso" };
     }
 
-    const id = this.getNextSubscriptionId();
-    const request = {
-      id,
-      type: "call_service",
-      domain,
-      service,
-      service_data: serviceData,
-    };
-    console.log(`[WS-LOG] callService INVIO: ${JSON.stringify(request)}`);
-
-    return new Promise((resolve) => {
-      let settled = false;
-      const handler = (data) => {
-        try {
-          const msg = JSON.parse(data);
-          if (msg.id !== id) return;
-          if (settled) return;
-          settled = true;
-          this.wsConnection.off("message", handler);
-          console.log(`[WS-LOG] callService RISPOSTA per id=${id}: ${JSON.stringify(msg)}`);
-          resolve({ success: !!msg.success, result: msg });
-        } catch (e) {
-          // ignore parse errors for unrelated messages
-        }
-      };
-
-      this.wsConnection.on("message", handler);
-
-      try {
-        this.wsConnection.send(JSON.stringify(request));
-      } catch (e) {
-        this.wsConnection.off("message", handler);
-        console.error(`[WS-LOG] callService ERRORE invio: ${e.message}`);
-        resolve({ success: false, error: e.message });
-        return;
+    try {
+      const msg = await this.sendRequest({
+        type: "call_service",
+        domain,
+        service,
+        service_data: serviceData,
+      });
+      if (!msg.success) {
+        return { success: false, error: msg.error?.message || "errore sconosciuto", result: msg };
       }
-
-      setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        this.wsConnection.off("message", handler);
-        console.error(`[WS-LOG] callService TIMEOUT per id=${id}, domain=${domain}, service=${service}`);
-        resolve({ success: false, error: "timeout" });
-      }, 5000);
-    });
+      return { success: true, result: msg };
+    } catch (error) {
+      console.error(`callService ${domain}.${service} fallito: ${error.message}`);
+      return { success: false, error: error.message };
+    }
   }
 }
 

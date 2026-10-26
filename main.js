@@ -6,33 +6,8 @@ if (process.platform === "linux" && !process.argv.includes("--ozone-platform=x11
   return;
 }
 
-const { BrowserWindow, Menu, Notification, powerMonitor } = require("electron");
-const { execSync } = require("child_process");
+const { BrowserWindow, Menu, Notification, powerMonitor, ipcMain, dialog } = require("electron");
 const path = require("path");
-
-function getInstallationType() {
-  if (process.platform !== 'linux') return process.platform;
-  
-  if (process.env.APPIMAGE) {
-    return 'AppImage';
-  }
-  
-  try {
-    execSync('rpm -q HomeSentinel', { stdio: 'ignore' });
-    return 'RPM';
-  } catch (e) {
-    // Not RPM
-  }
-  
-  try {
-    execSync('dpkg -l homesentinel', { stdio: 'ignore' });
-    return 'DEB';
-  } catch (e) {
-    // Not DEB
-  }
-  
-  return 'unknown';
-}
 
 // Importa i moduli
 const SettingsManager = require("./src/shared/settings-manager");
@@ -45,6 +20,7 @@ const AutoStartManager = require("./src/main/auto-start-manager");
 const StreamPreWarmer = require("./src/main/stream-prewarmer");
 const DndScheduler = require("./src/main/dnd-scheduler");
 const IPCHandlers = require("./src/main/ipc-handlers");
+const EventLog = require("./src/main/event-log");
 const appConfig = require("./src/shared/app-config");
 const { isCameraVisibleInState } = require("./src/shared/alarm-states");
 
@@ -66,6 +42,9 @@ let isWebSocketConnected = false;
 let isSystemLocked = false;
 let isAlarmTriggered = false;
 let intercomNotification = null;
+let disconnectNotifyTimeout = null;
+const eventLog = new EventLog();
+let disconnectNotified = false;
 let gotTheLock;
 const isAutoStart = process.argv.includes("--autostart");
 
@@ -136,10 +115,7 @@ function createMainWindow() {
         {
           label: "Esci",
           accelerator: "CmdOrCtrl+Q",
-          click: () => {
-            isQuitting = true;
-            app.quit();
-          },
+          click: () => requestQuit(),
         },
       ],
     },
@@ -154,10 +130,10 @@ function createMainWindow() {
 }
 
 // Inizializza i gestori
-function initializeManagers() {
+async function initializeManagers() {
   settingsManager = new SettingsManager(app);
   settingsManager.initializeSettingsPath();
-  settingsManager.loadSettings();
+  await settingsManager.loadSettings();
 
   websocketManager = new WebSocketManager(settingsManager);
   pipWindowManager = new PiPWindowManager(settingsManager);
@@ -180,24 +156,41 @@ function initializeManagers() {
 function setupEventCallbacks() {
   websocketManager.setEventCallbacks({
     onSensorEvent: (eventData) => {
-      const dndMode = trayManager.getDndMode();
-      if (dndMode || isSystemLocked || isAlarmTriggered) {
+      const isActivation = pipWindowManager.isActivation(eventData.sensorState, eventData.previousState);
+      const logActivation = (detail) => {
+        if (isActivation) eventLog.add("sensor", eventData.friendlyName, detail);
+      };
+
+      if (isAlarmTriggered) {
+        logActivation("Allarme in corso: telecamera non mostrata");
+        return;
+      }
+      if (trayManager.getDndMode()) {
+        logActivation("Silenziato (Non disturbare)");
+        return;
+      }
+      if (isSystemLocked) {
+        logActivation("Schermo bloccato: telecamera non mostrata");
         return;
       }
       const settings = settingsManager.getSettings();
       if (settings.alarmSettings?.enabled && settings.alarmSettings?.sensorId) {
         const alarmState = websocketManager.getAlarmState();
         if (!isCameraVisibleInState(eventData.mapping, alarmState)) {
+          logActivation("Nascosta per lo stato dell'antifurto");
           return;
         }
       }
+      logActivation("Telecamera mostrata");
       pipWindowManager.handleSensorEvent(eventData);
     },
     onAlarmEvent: (alarmData) => {
       if (alarmData.dismissed) {
+        eventLog.add("alarm", "Allarme terminato", alarmData.sensorName);
         alarmWindowManager.dismissAlarm(alarmData.sensorState);
         isAlarmTriggered = false;
       } else {
+        eventLog.add("alarm", "Allarme scattato", alarmData.sensorName);
         isAlarmTriggered = true;
         pipWindowManager.closeAllPiPWindows();
         alarmWindowManager.triggerAlarm(alarmData);
@@ -206,14 +199,11 @@ function setupEventCallbacks() {
     onConnectionStatusChange: (isConnected) => {
       const wasConnected = isWebSocketConnected;
       isWebSocketConnected = isConnected;
-      mainWindow.webContents.send("connection-status-changed", isConnected);
-
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("connection-status-changed", isConnected);
+      }
       if (wasConnected !== isConnected) {
-        new Notification({
-          title: appConfig.app.name,
-          body: isConnected ? "Connesso a Home Assistant" : "Disconnesso da Home Assistant",
-          silent: false,
-        }).show();
+        handleConnectionNotification(isConnected);
       }
     },
     onAlarmStateChange: (alarmData) => {
@@ -222,9 +212,11 @@ function setupEventCallbacks() {
       }
     },
     onIntercomEvent: () => {
+      eventLog.add("intercom", "Citofono", "Qualcuno al cancello");
       showIntercomDialog();
     },
-    onGateLockOpened: () => {
+    onGateLockOpened: (data) => {
+      eventLog.add("gate", "Cancello aperto", data.friendlyName);
       if (intercomNotification) {
         intercomNotification.close();
         intercomNotification = null;
@@ -237,12 +229,71 @@ function setupEventCallbacks() {
 
   trayManager.setEventCallbacks({
     onDndModeChange: (dndMode) => {
+      streamPreWarmer.setPaused("dnd", dndMode);
     },
-    onQuit: () => {
-      isQuitting = true;
-      app.quit();
-    },
+    onQuit: () => requestQuit(),
   });
+}
+
+// Uscita centralizzata (menu, tray, pulsante): avvisa se ci sono impostazioni non salvate
+async function requestQuit() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    let hasUnsavedChanges = false;
+    try {
+      hasUnsavedChanges = await mainWindow.webContents.executeJavaScript("window.hasUnsavedChanges === true");
+    } catch (error) {
+      // Renderer non disponibile: esci comunque
+    }
+    if (hasUnsavedChanges) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: "warning",
+        buttons: ["Annulla", "Esci senza salvare"],
+        defaultId: 0,
+        cancelId: 0,
+        title: appConfig.app.name,
+        message: "Ci sono impostazioni non salvate",
+        detail: "Se esci ora le modifiche andranno perse.",
+      });
+      if (response === 0) return;
+    }
+  }
+  isQuitting = true;
+  app.quit();
+}
+
+// Notifica le disconnessioni solo se durano più di qualche secondo:
+// le micro-interruzioni (cambio rete, riavvio rapido di HA) restano silenziose
+function handleConnectionNotification(isConnected) {
+  const showNotification = (body) => {
+    new Notification({ title: appConfig.app.name, body, silent: false }).show();
+  };
+
+  if (isConnected) {
+    if (disconnectNotifyTimeout) {
+      clearTimeout(disconnectNotifyTimeout);
+      disconnectNotifyTimeout = null;
+    }
+    if (disconnectNotified) {
+      disconnectNotified = false;
+      eventLog.add("connection", "Riconnesso a Home Assistant");
+      showNotification("Riconnesso a Home Assistant");
+    } else if (!handleConnectionNotification.firstConnectDone) {
+      showNotification("Connesso a Home Assistant");
+    }
+    handleConnectionNotification.firstConnectDone = true;
+    return;
+  }
+
+  if (disconnectNotifyTimeout || disconnectNotified) return;
+  disconnectNotifyTimeout = setTimeout(() => {
+    disconnectNotifyTimeout = null;
+    if (!isWebSocketConnected && !isQuitting) {
+      disconnectNotified = true;
+      eventLog.add("connection", "Disconnesso da Home Assistant");
+      showNotification("Disconnesso da Home Assistant");
+    }
+  }, appConfig.websocket.disconnectNotifyDelay);
 }
 
 // Mostra il popup del citofono con pulsante per aprire il cancello.
@@ -269,12 +320,12 @@ async function showIntercomDialog() {
     return;
   }
 
-  let cameraStream = null;
+  // Il popup appare subito; lo stream della telecamera viene aggiunto appena risolto
+  intercomWindowManager.showDialog();
   if (gateSettings.intercomCameraId) {
-    cameraStream = await resolveIntercomCameraStream(gateSettings.intercomCameraId);
+    const cameraStream = await resolveIntercomCameraStream(gateSettings.intercomCameraId);
+    intercomWindowManager.setCameraStream(cameraStream);
   }
-
-  intercomWindowManager.showDialog(cameraStream);
 }
 
 // Risolve l'URL dello stream della telecamera citofono (HLS se abilitato, altrimenti MJPEG)
@@ -304,19 +355,29 @@ async function resolveIntercomCameraStream(cameraId) {
   }
 }
 
-// Apre il cancello tramite il servizio lock.open di Home Assistant
+// Apre il cancello tramite il servizio lock.unlock di Home Assistant
 async function openGate() {
   const settings = settingsManager.getSettings();
   const gateLockId = settings.gateSettings?.gateLockId;
-  console.log(`[GATE-LOG] openGate chiamato: gateLockId=${gateLockId}, ws connesso=${isWebSocketConnected}`);
-  if (!gateLockId || !websocketManager) return;
+  if (!gateLockId || !websocketManager) {
+    return { success: false, error: "Cancello non configurato" };
+  }
 
   const result = await websocketManager.callService("lock", "unlock", { entity_id: gateLockId });
   if (!result.success) {
-    console.error("Apertura cancello fallito:", result.error);
-  } else {
-    console.log(`[GATE-LOG] openGate success=${result.success}, result=${JSON.stringify(result.result)}`);
+    console.error("Apertura cancello fallita:", result.error);
   }
+  return { success: result.success, error: result.error };
+}
+
+function setupMainIpcHandlers() {
+  ipcMain.handle("open-gate", () => openGate());
+  ipcMain.handle("get-recent-events", () => eventLog.list());
+  eventLog.setOnAdd((entry) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("event-logged", entry);
+    }
+  });
 }
 
 // Eventi dell'applicazione
@@ -328,7 +389,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   // Esegui il codice solo se abbiamo il lock dell'istanza singola
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     try {
  
       // Ascolta per eventi di seconda istanza
@@ -342,19 +403,9 @@ if (!gotTheLock) {
       // Imposta l'icona dell'applicazione a livello globale
 
       app.setAppUserModelId(appConfig.app.name);
-      if (process.platform !== "darwin") {
-        // Su Windows e Linux, imposta l'icona dell'applicazione
-        iconPath = path.join(__dirname, appConfig.paths.icon);
-        if (require("fs").existsSync(iconPath)) {
-          app.setAppUserModelId(appConfig.app.name);
-          if (process.platform === "win32") {
-            app.setAppUserModelId(appConfig.app.name);
-          }
-        }
-      }
 
       // Inizializza prima i gestori per avere accesso alle impostazioni
-      initializeManagers();
+      await initializeManagers();
 
       // Crea la tray prima della finestra per sapere se è disponibile
       trayManager.createTray();
@@ -363,10 +414,8 @@ if (!gotTheLock) {
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
-      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, dndScheduler, () => {
-        isQuitting = true;
-        app.quit();
-      });
+      ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, dndScheduler, () => requestQuit());
+      setupMainIpcHandlers();
 
 
       setupEventCallbacks();
@@ -375,60 +424,61 @@ if (!gotTheLock) {
         isAlarmTriggered = false;
       });
 
+      // Con il Non disturbare già attivo all'avvio il pre-warmer parte in pausa
+      streamPreWarmer.setPaused("dnd", trayManager.getDndMode());
       streamPreWarmer.start();
       dndScheduler.start();
 
       // Configura i gestori per gli eventi di blocco/sblocco del sistema
+      const logPowerEvent = (name) => {
+        console.log(`[${new Date().toISOString()}] ${name}: wsConnected=${isWebSocketConnected}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}`);
+      };
+
+      const setLocked = (locked) => {
+        isSystemLocked = locked;
+        pipWindowManager.setSystemLocked(locked);
+        // La ripresa del pre-warmer avviene dopo la verifica della connessione (reconnectAfterWake)
+        if (locked) {
+          streamPreWarmer.setPaused("locked", true);
+        }
+      };
+
       powerMonitor.on("lock-screen", () => {
-        const ts = new Date().toISOString();
-        isSystemLocked = true;
-        pipWindowManager.setSystemLocked(true);
-        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
-        console.log(`[${ts}] [DEBUG] lock-screen: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
+        setLocked(true);
+        logPowerEvent("lock-screen");
       });
 
       powerMonitor.on("unlock-screen", () => {
-        const ts = new Date().toISOString();
-        isSystemLocked = false;
-        pipWindowManager.setSystemLocked(false);
-        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
-        console.log(`[${ts}] [DEBUG] unlock-screen: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
+        setLocked(false);
+        logPowerEvent("unlock-screen");
         reconnectAfterWake();
       });
 
       powerMonitor.on("suspend", () => {
-        const ts = new Date().toISOString();
-        isSystemLocked = true;
-        pipWindowManager.setSystemLocked(true);
-        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
-        console.log(`[${ts}] [DEBUG] suspend: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
+        setLocked(true);
+        logPowerEvent("suspend");
       });
 
       powerMonitor.on("resume", () => {
-        const ts = new Date().toISOString();
-        isSystemLocked = false;
-        pipWindowManager.setSystemLocked(false);
-        const wsState = websocketManager.wsConnection ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][websocketManager.wsConnection.readyState] : 'NULL';
-        console.log(`[${ts}] [DEBUG] resume: wsState=${wsState}, pipWindows=${pipWindowManager.getActivePiPWindowsCount()}, wsConnected=${isWebSocketConnected}`);
+        setLocked(false);
+        logPowerEvent("resume");
         reconnectAfterWake();
       });
 
+      // resume e unlock-screen arrivano spesso insieme: un solo controllo per risveglio
+      let wakeTimeout = null;
       function reconnectAfterWake() {
-        const ts = new Date().toISOString();
-        console.log(`[${ts}] [DEBUG] reconnectAfterWake: scheduling forceReconnect + prewarmer restart (2s) and PiP refresh (5s)`);
+        if (wakeTimeout) clearTimeout(wakeTimeout);
 
-        setTimeout(() => {
-          const ts2 = new Date().toISOString();
-          console.log(`[${ts2}] [DEBUG] reconnectAfterWake: executing forceReconnect + prewarmer restart`);
-          websocketManager.forceReconnect();
-          streamPreWarmer.restart();
-        }, 2000);
-
-        setTimeout(async () => {
-          const ts3 = new Date().toISOString();
-          console.log(`[${ts3}] [DEBUG] reconnectAfterWake: refreshing active PiP windows`);
+        wakeTimeout = setTimeout(async () => {
+          wakeTimeout = null;
+          // Dopo una sospensione la rete può impiegare qualche secondo a tornare
+          await websocketManager.checkConnection();
+          if (!isSystemLocked) {
+            streamPreWarmer.setPaused("locked", false);
+          }
           await pipWindowManager.refreshActivePiPWindows();
-        }, 5000);
+        }, 1500);
       }
 
       // Sincronizza l'impostazione di auto-start
@@ -471,6 +521,9 @@ if (!gotTheLock) {
       if (dndScheduler) {
         dndScheduler.stop();
       }
+      if (disconnectNotifyTimeout) {
+        clearTimeout(disconnectNotifyTimeout);
+      }
       if (websocketManager) {
         websocketManager.closeConnection();
       }
@@ -485,9 +538,6 @@ if (!gotTheLock) {
   // Gestisci eccezioni non catturate
   process.on("uncaughtException", (error) => {
     console.error("Eccezione non catturata:", error);
-    if (websocketManager) {
-      websocketManager.closeConnection();
-    }
   });
 
   process.on("unhandledRejection", (reason) => {
