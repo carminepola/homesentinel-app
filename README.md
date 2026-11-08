@@ -47,10 +47,41 @@ Scarica il pacchetto per il tuo sistema dalla pagina [Releases](https://git.devm
 | --- | --- | --- |
 | Debian, Ubuntu | file `.deb` | `sudo apt install ./HomeSentinel_x.y.z_amd64.deb` |
 | Fedora, openSUSE | file `.rpm` | `sudo dnf install ./<file>.rpm` |
+| Arch, Omarchy | file `.pkg.tar.zst` | `sudo pacman -U ./homesentinel-*.pkg.tar.zst` (oppure dal repository, vedi sotto) |
 | Qualsiasi Linux | file `.AppImage` | `chmod +x homesentinel-*.AppImage` e avvialo |
 | Windows | file `.exe` | Esegui l'installer |
 
 Per aggiornare, dalla dashboard premi **Verifica aggiornamenti**: se c'è una nuova versione vedi le novità e il link per scaricarla.
+
+### Arch Linux e Omarchy: repository pacman
+
+Ogni release viene pubblicata anche nel registry Arch di Forgejo. Se aggiungi il repository, `pacman` installa HomeSentinel e lo aggiorna insieme al resto del sistema.
+
+1. Importa la chiave con cui Forgejo firma il repository:
+
+   ```bash
+   curl -O https://git.devmin.it/api/packages/carmine/arch/repository.key
+   sudo pacman-key --add repository.key
+   sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons repository.key | awk -F: '/^fpr/{print $10; exit}')"
+   ```
+
+2. Aggiungi il repository in fondo a `/etc/pacman.conf`:
+
+   ```ini
+   [carmine.git.devmin.it]
+   SigLevel = Required
+   Server = https://git.devmin.it/api/packages/carmine/arch/homesentinel/$arch
+   ```
+
+3. Installa:
+
+   ```bash
+   sudo pacman -Sy homesentinel
+   ```
+
+Gli aggiornamenti arrivano con `sudo pacman -Syu` (su Omarchy anche con `omarchy-update`).
+
+Se il pacchetto è privato, nella riga `Server` inserisci utente e token: `https://utente:token@git.devmin.it/api/packages/...`.
 
 ## Primo avvio
 
@@ -179,12 +210,13 @@ docs/screenshots/             Immagini di questo README
 ### Build
 
 ```bash
-npm run build-linux   # AppImage, deb e rpm in dist/
+npm run build-linux   # AppImage, deb, rpm e pacman in dist/
+npm run build-pacman  # solo il pacchetto Arch (serve bsdtar/zstd)
 npm run build-win     # installer NSIS per Windows
 ./build-linux.sh      # build Linux dentro Docker (electronuserland/builder)
 ```
 
-Le release vengono create dalla pipeline Forgejo quando si pubblica un tag `v*`:
+Le release vengono create dalla pipeline Forgejo quando si pubblica un tag `v*`. Il pacchetto Arch viene caricato anche nel registry Forgejo, quindi il secret `TOKEN` deve avere il permesso **package: write**.
 
 ```bash
 npm version minor     # oppure patch / major

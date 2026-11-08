@@ -141,6 +141,70 @@ jobs:
           path: dist/*.rpm
           retention-days: 30
 
+  build_pacman:
+    runs-on: ubuntu-latest
+    container:
+      image: electronuserland/builder:wine
+    needs: [set_version]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache electron
+        uses: actions/cache@v3
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+            node_modules/
+          key: ${{ github.ref_name }}
+
+      - name: Install pacman build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libarchive-tools zstd
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm audit --audit-level=critical
+
+      - name: Build pacman package
+        run: |
+          npm run build-pacman
+          # electron-builder produce "*.pacman": rinomina con l'estensione standard Arch
+          for f in dist/*.pacman; do
+            [ -f "$f" ] && mv "$f" "${f%.pacman}-x86_64.pkg.tar.zst"
+          done
+          ls -l dist/
+
+      - name: Publish to Forgejo Arch registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          set -e
+          for FILE in dist/*.pacman dist/*.pkg.tar.zst; do
+            [ -f "$FILE" ] || continue
+            echo "Uploading ${FILE} to Arch registry..."
+            HTTP=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' -X PUT \
+              "${GITHUB_SERVER_URL}/api/packages/${GITHUB_REPOSITORY_OWNER}/arch/homesentinel" \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              --upload-file "$FILE")
+            cat /tmp/resp.txt; echo
+            if [ "$HTTP" != "201" ] && [ "$HTTP" != "409" ]; then
+              echo "Upload failed (HTTP $HTTP)"; exit 1
+            fi
+          done
+
+      - name: Upload pacman artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: pacman
+          path: |
+            dist/*.pacman
+            dist/*.pkg.tar.zst
+          retention-days: 30
+
   build_windows:
     runs-on: ubuntu-latest
     container:
@@ -181,6 +245,7 @@ jobs:
       - build_appimage
       - build_deb
       - build_rpm
+      - build_pacman
       - build_windows
     steps:
       - name: Download changelog
@@ -204,6 +269,12 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: rpm
+          path: dist/
+
+      - name: Download pacman
+        uses: actions/download-artifact@v3
+        with:
+          name: pacman
           path: dist/
 
       - name: Download Windows
