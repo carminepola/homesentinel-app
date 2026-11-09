@@ -1107,12 +1107,9 @@ async function checkForUpdates() {
           </div>
           <span class="status-text" style="color: var(--text-tertiary); font-size: 0.8125rem">Installata: v${result.currentVersion}</span>
           ${changelogHtml}
-          <button id="open-downloads-btn" class="btn primary" style="margin-top: 0.5rem">Scarica aggiornamento</button>
+          <div id="update-action" style="margin-top: 0.5rem"></div>
         </div>`;
-
-      $("open-downloads-btn")?.addEventListener("click", () => {
-        ipcRenderer.invoke("open-release-page", "https://git.devmin.it/carmine/homesentinel-app/releases/");
-      });
+      renderUpdateAction(result.update);
     } else {
       content.innerHTML = `<span class="status-text" style="color: var(--success)">L'app è aggiornata (v${result.currentVersion})</span>`;
     }
@@ -1120,6 +1117,57 @@ async function checkForUpdates() {
     console.error("Errore nel check aggiornamenti:", error);
   }
 }
+
+// Cosa fare per installare la nuova versione: dipende da come è installata l'app
+function renderUpdateAction(update) {
+  const box = $("update-action");
+  if (!box) return;
+  const mode = update?.mode || "manual";
+
+  if (mode === "auto") {
+    if (update.state === "ready") {
+      box.innerHTML = `
+        <span class="status-text" style="font-size: 0.8125rem">Aggiornamento scaricato: verrà installato al prossimo riavvio.</span>
+        <button id="install-update-btn" class="btn primary" style="margin-top: 0.5rem">Riavvia e aggiorna</button>`;
+      $("install-update-btn")?.addEventListener("click", () => ipcRenderer.invoke("install-update"));
+    } else if (update.state === "error") {
+      box.innerHTML = `<span class="status-text" style="color: var(--text-tertiary); font-size: 0.8125rem">Download automatico non riuscito</span>
+        <button id="open-downloads-btn" class="btn secondary" style="margin-top: 0.5rem">Scarica manualmente</button>`;
+    } else {
+      const text = update.state === "downloading"
+        ? `Download in corso${update.percent ? ` (${update.percent}%)` : ""}...`
+        : "Preparazione del download...";
+      box.innerHTML = `<span class="status-text" style="font-size: 0.8125rem">${text}</span>`;
+    }
+  } else if (mode === "package") {
+    box.innerHTML = `
+      <span class="status-text" style="font-size: 0.8125rem">Installata come pacchetto ${update.type}: aggiorna con il gestore di pacchetti</span>
+      <div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem">
+        <code id="update-command" style="padding: 0.375rem 0.625rem; background: var(--bg-secondary); border-radius: 6px; font-size: 0.8125rem; user-select: all"></code>
+        <button id="copy-update-command-btn" class="btn secondary">Copia</button>
+      </div>`;
+    $("update-command").textContent = update.command;
+    $("copy-update-command-btn")?.addEventListener("click", (e) => {
+      require("electron").clipboard.writeText(update.command);
+      e.target.textContent = "Copiato";
+    });
+  } else {
+    box.innerHTML = `<button id="open-downloads-btn" class="btn primary">Scarica aggiornamento</button>`;
+  }
+
+  $("open-downloads-btn")?.addEventListener("click", () => {
+    ipcRenderer.invoke("open-release-page", "https://git.devmin.it/carmine/homesentinel-app/releases/");
+  });
+}
+
+ipcRenderer.on("update-status", (event, update) => {
+  if ($("update-action")) {
+    renderUpdateAction(update);
+  } else if (update.state === "ready") {
+    // Scaricato in background: mostra subito la card con il pulsante di riavvio
+    checkForUpdates();
+  }
+});
 
 ipcRenderer.on("dnd-mode-changed", (event, dndMode) => {
   appSettings.dndMode = dndMode;

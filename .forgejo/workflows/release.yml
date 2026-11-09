@@ -72,7 +72,10 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: appimage
-          path: dist/*.AppImage
+          # latest-linux.yml: feed per l'aggiornamento automatico (electron-updater)
+          path: |
+            dist/*.AppImage
+            dist/latest-linux.yml
           retention-days: 30
 
   build_deb:
@@ -100,6 +103,24 @@ jobs:
 
       - name: Build DEB
         run: npm run build-deb
+
+      - name: Publish to Forgejo Debian registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          set -e
+          for FILE in dist/*.deb; do
+            [ -f "$FILE" ] || continue
+            echo "Uploading ${FILE} to Debian registry..."
+            HTTP=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' -X PUT \
+              "${GITHUB_SERVER_URL}/api/packages/${GITHUB_REPOSITORY_OWNER}/debian/pool/stable/main/upload" \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              --upload-file "$FILE")
+            cat /tmp/resp.txt; echo
+            if [ "$HTTP" != "201" ] && [ "$HTTP" != "409" ]; then
+              echo "Upload failed (HTTP $HTTP)"; exit 1
+            fi
+          done
 
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v3
@@ -133,6 +154,24 @@ jobs:
 
       - name: Build RPM
         run: npm run build-rpm
+
+      - name: Publish to Forgejo RPM registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          set -e
+          for FILE in dist/*.rpm; do
+            [ -f "$FILE" ] || continue
+            echo "Uploading ${FILE} to RPM registry..."
+            HTTP=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' -X PUT \
+              "${GITHUB_SERVER_URL}/api/packages/${GITHUB_REPOSITORY_OWNER}/rpm/upload" \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              --upload-file "$FILE")
+            cat /tmp/resp.txt; echo
+            if [ "$HTTP" != "201" ] && [ "$HTTP" != "409" ]; then
+              echo "Upload failed (HTTP $HTTP)"; exit 1
+            fi
+          done
 
       - name: Upload RPM artifact
         uses: actions/upload-artifact@v3
@@ -235,7 +274,11 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: windows
-          path: dist/*.exe
+          # latest.yml e .blockmap: feed per l'aggiornamento automatico (electron-updater)
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
           retention-days: 30
 
   create_release:
@@ -282,6 +325,32 @@ jobs:
         with:
           name: windows
           path: dist/
+
+      # Feed di electron-updater (Windows e AppImage): la versione "latest" del pacchetto
+      # generic ha un indirizzo fisso, quello configurato in package.json (build.publish)
+      - name: Publish update feed to Forgejo generic registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        run: |
+          set -e
+          BASE="${GITHUB_SERVER_URL}/api/packages/${GITHUB_REPOSITORY_OWNER}/generic/homesentinel"
+          AUTH="Authorization: token ${GITHUB_TOKEN}"
+
+          # I file di una versione generic non si sovrascrivono: elimina la "latest" precedente
+          HTTP=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "${BASE}/latest" -H "${AUTH}")
+          echo "Delete previous latest: HTTP ${HTTP}"
+
+          for FILE in dist/latest.yml dist/latest-linux.yml dist/*.exe dist/*.exe.blockmap dist/*.AppImage; do
+            [ -f "$FILE" ] || continue
+            NAME=$(basename "$FILE")
+            echo "Uploading ${NAME}..."
+            HTTP=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' -X PUT "${BASE}/latest/${NAME}" \
+              -H "${AUTH}" --upload-file "$FILE")
+            cat /tmp/resp.txt; echo
+            if [ "$HTTP" != "201" ]; then
+              echo "Upload failed (HTTP $HTTP)"; exit 1
+            fi
+          done
 
       - name: Create release description
         run: |

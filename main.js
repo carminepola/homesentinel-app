@@ -20,6 +20,7 @@ const IntercomWindowManager = require("./src/main/intercom-window-manager");
 const TrayManager = require("./src/main/tray-manager");
 const AutoStartManager = require("./src/main/auto-start-manager");
 const StreamPreWarmer = require("./src/main/stream-prewarmer");
+const { UpdateManager } = require("./src/main/update-manager");
 const DndScheduler = require("./src/main/dnd-scheduler");
 const IPCHandlers = require("./src/main/ipc-handlers");
 const EventLog = require("./src/main/event-log");
@@ -34,6 +35,7 @@ let settingsManager;
 let websocketManager;
 let pipWindowManager;
 let alarmWindowManager;
+let updateManager;
 let intercomWindowManager;
 let trayManager;
 let autoStartManager;
@@ -149,6 +151,7 @@ async function initializeManagers() {
   trayManager = new TrayManager(settingsManager);
   autoStartManager = new AutoStartManager(settingsManager);
   streamPreWarmer = new StreamPreWarmer(settingsManager, websocketManager);
+  updateManager = new UpdateManager();
   pipWindowManager.setStreamPreWarmer(streamPreWarmer);
   dndScheduler = new DndScheduler(settingsManager, trayManager);
   // ipcHandlers verrà inizializzato dopo la creazione della finestra
@@ -416,7 +419,9 @@ if (!gotTheLock) {
 
       // Imposta la finestra principale nel tray manager e negli ipc handlers
       trayManager.setMainWindow(mainWindow);
+      updateManager.setMainWindow(mainWindow);
       ipcHandlers = new IPCHandlers(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, dndScheduler, () => requestQuit());
+      ipcHandlers.setUpdateManager(updateManager);
       setupMainIpcHandlers();
 
 
@@ -430,6 +435,7 @@ if (!gotTheLock) {
       streamPreWarmer.setPaused("dnd", trayManager.getDndMode());
       streamPreWarmer.start();
       dndScheduler.start();
+      updateManager.start();
 
       // Configura i gestori per gli eventi di blocco/sblocco del sistema
       const logPowerEvent = (name) => {

@@ -5,13 +5,13 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
-    "build-win": "electron-builder --win",
-    "build-appimage": "electron-builder --linux AppImage",
-    "build-deb": "electron-builder --linux deb",
-    "build-rpm": "electron-builder --linux rpm",
-    "build-pacman": "electron-builder --linux pacman",
-    "build-linux": "electron-builder --linux",
+    "build": "electron-builder --publish never",
+    "build-win": "electron-builder --win --publish never",
+    "build-appimage": "electron-builder --linux AppImage --publish never",
+    "build-deb": "electron-builder --linux deb --publish never",
+    "build-rpm": "electron-builder --linux rpm --publish never",
+    "build-pacman": "electron-builder --linux pacman --publish never",
+    "build-linux": "electron-builder --linux --publish never",
     "version-patch": "npm version patch",
     "version-minor": "npm version minor",
     "version-major": "npm version major",
@@ -39,7 +39,12 @@
   "build": {
     "appId": "it.devmin.homesentinel",
     "productName": "homesentinel",
-    "publish": null,
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://git.devmin.it/api/packages/carmine/generic/homesentinel/latest"
+      }
+    ],
     "directories": {
       "output": "dist"
     },
@@ -62,6 +67,9 @@
       "target": "nsis",
       "icon": "assets/icon.ico"
     },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
     "linux": {
       "target": [
         "AppImage",
@@ -74,6 +82,7 @@
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "hls.js": "^1.7.3",
     "marked": "^18.1.1",
     "ws": "^8.22.0"

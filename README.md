@@ -51,7 +51,36 @@ Scarica il pacchetto per il tuo sistema dalla pagina [Releases](https://git.devm
 | Qualsiasi Linux | file `.AppImage` | `chmod +x homesentinel-*.AppImage` e avvialo |
 | Windows | file `.exe` | Esegui l'installer |
 
-Per aggiornare, dalla dashboard premi **Verifica aggiornamenti**: se c'è una nuova versione vedi le novità e il link per scaricarla.
+### Aggiornamenti
+
+| Installazione | Come si aggiorna |
+| --- | --- |
+| Windows, AppImage | Da sola: l'app controlla ogni 6 ore, scarica in background e installa al riavvio (o subito con **Riavvia e aggiorna**) |
+| Fedora, Debian/Ubuntu, Arch dal repository | Con il gestore di pacchetti, insieme al resto del sistema (vedi sotto) |
+| File `.rpm`/`.deb`/`.pkg.tar.zst` scaricato a mano | A mano, dalla pagina Releases |
+
+Dalla dashboard, **Verifica aggiornamenti** mostra le novità della nuova versione e cosa fare in base a come è installata l'app.
+
+### Fedora: repository rpm
+
+```bash
+sudo dnf config-manager addrepo --from-repofile=https://git.devmin.it/api/packages/carmine/rpm.repo
+sudo dnf install HomeSentinel
+```
+
+Gli aggiornamenti arrivano con `sudo dnf upgrade` o da GNOME Software. Per installarli in automatico: `sudo dnf install dnf-automatic` e `sudo systemctl enable --now dnf-automatic.timer` (con `apply_updates = yes` in `/etc/dnf/automatic.conf`).
+
+Se avevi installato un file `.rpm` scaricato a mano, basta aggiungere il repository: il pacchetto è lo stesso e da lì in poi si aggiorna da solo.
+
+### Debian e Ubuntu: repository apt
+
+```bash
+sudo curl -fsSL https://git.devmin.it/api/packages/carmine/debian/repository.key -o /etc/apt/keyrings/devmin.asc
+echo "deb [signed-by=/etc/apt/keyrings/devmin.asc] https://git.devmin.it/api/packages/carmine/debian stable main" | sudo tee /etc/apt/sources.list.d/devmin.list
+sudo apt update && sudo apt install homesentinel
+```
+
+Gli aggiornamenti arrivano con `sudo apt update && sudo apt upgrade` (o con `unattended-upgrades`).
 
 ### Arch Linux e Omarchy: repository pacman
 

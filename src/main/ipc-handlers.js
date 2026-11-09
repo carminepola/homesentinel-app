@@ -1,30 +1,6 @@
 const { ipcMain, dialog, app, shell } = require("electron");
-const { execSync } = require("child_process");
+const { detectInstallation } = require("./update-manager");
 const appConfig = require("../shared/app-config");
-
-function getInstallationType() {
-  if (process.platform !== 'linux') return process.platform;
-  
-  if (process.env.APPIMAGE) {
-    return 'AppImage';
-  }
-  
-  try {
-    execSync('rpm -q HomeSentinel', { stdio: 'ignore' });
-    return 'RPM';
-  } catch (e) {
-    // Not RPM
-  }
-  
-  try {
-    execSync('dpkg -l homesentinel', { stdio: 'ignore' });
-    return 'DEB';
-  } catch (e) {
-    // Not DEB
-  }
-  
-  return 'unknown';
-}
 
 class IPCHandlers {
   constructor(mainWindow, settingsManager, websocketManager, pipWindowManager, alarmWindowManager, autoStartManager, trayManager, streamPreWarmer, dndScheduler, onQuitCallback) {
@@ -150,7 +126,15 @@ class IPCHandlers {
     });
 
     ipcMain.handle("get-installation-type", () => {
-      return getInstallationType();
+      return this.updateManager ? this.updateManager.getInstallation() : detectInstallation();
+    });
+
+    ipcMain.handle("get-update-status", () => {
+      return this.updateManager ? this.updateManager.getStatus() : null;
+    });
+
+    ipcMain.handle("install-update", () => {
+      return this.updateManager ? this.updateManager.installNow() : false;
     });
   }
 
@@ -407,7 +391,14 @@ class IPCHandlers {
     return { enabled: settings.dndMode || false };
   }
 
+  setUpdateManager(updateManager) {
+    this.updateManager = updateManager;
+  }
+
   async handleCheckForUpdates() {
+    // Windows/AppImage: avvia anche il download in background (se c'è una nuova versione)
+    this.updateManager?.checkNow();
+
     try {
       const currentVersion = app.getVersion();
       const isBeta = currentVersion.includes("-beta");
@@ -445,6 +436,7 @@ class IPCHandlers {
         releaseDescription: latestRelease.body || "",
         isBeta: isBeta,
         assets: assetUrls,
+        update: this.updateManager ? this.updateManager.getStatus() : null,
       };
     } catch (error) {
       return { error: error.message, currentVersion: app.getVersion() };
