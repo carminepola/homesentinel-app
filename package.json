@@ -1,6 +1,6 @@
 {
   "name": "HomeSentinel",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "Monitor delle telecamere di Home Assistant con finestre PiP, allarme a tutto schermo e citofono",
   "main": "main.js",
   "scripts": {
