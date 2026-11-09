@@ -293,6 +293,8 @@ jobs:
       - build_rpm
       - build_pacman
       - build_windows
+    # Pubblica anche se una build fallisce: la release contiene i pacchetti riusciti
+    if: ${{ !cancelled() && needs.set_version.result == 'success' }}
     steps:
       - name: Download changelog
         uses: actions/download-artifact@v3
@@ -301,30 +303,35 @@ jobs:
 
       - name: Download AppImage
         uses: actions/download-artifact@v3
+        continue-on-error: true
         with:
           name: appimage
           path: dist/
 
       - name: Download DEB
         uses: actions/download-artifact@v3
+        continue-on-error: true
         with:
           name: deb
           path: dist/
 
       - name: Download RPM
         uses: actions/download-artifact@v3
+        continue-on-error: true
         with:
           name: rpm
           path: dist/
 
       - name: Download pacman
         uses: actions/download-artifact@v3
+        continue-on-error: true
         with:
           name: pacman
           path: dist/
 
       - name: Download Windows
         uses: actions/download-artifact@v3
+        continue-on-error: true
         with:
           name: windows
           path: dist/
@@ -338,6 +345,11 @@ jobs:
           set -e
           BASE="${GITHUB_SERVER_URL}/api/packages/${GITHUB_REPOSITORY_OWNER}/generic/homesentinel"
           AUTH="Authorization: token ${GITHUB_TOKEN}"
+
+          # Se sono fallite sia la build Windows sia quella AppImage, lascia il feed precedente
+          if [ ! -f dist/latest.yml ] && [ ! -f dist/latest-linux.yml ]; then
+            echo "Nessun feed di aggiornamento da pubblicare"; exit 0
+          fi
 
           # I file di una versione generic non si sovrascrivono: elimina la "latest" precedente
           HTTP=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE "${BASE}/latest" -H "${AUTH}")
@@ -358,8 +370,21 @@ jobs:
       - name: Create release description
         run: |
           CHANGELOG=$(cat changelog.txt)
+          FAILED=""
+          [ "${{ needs.build_appimage.result }}" = "success" ] || FAILED="$FAILED AppImage"
+          [ "${{ needs.build_deb.result }}" = "success" ] || FAILED="$FAILED DEB"
+          [ "${{ needs.build_rpm.result }}" = "success" ] || FAILED="$FAILED RPM"
+          [ "${{ needs.build_pacman.result }}" = "success" ] || FAILED="$FAILED pacman"
+          [ "${{ needs.build_windows.result }}" = "success" ] || FAILED="$FAILED Windows"
+          if [ -n "$FAILED" ]; then
+            WARNING="> ⚠️ Build non riuscite, pacchetti non inclusi:${FAILED}"
+          else
+            WARNING=""
+          fi
           cat > release_desc.md <<ENDOFDESC
           ## HomeSentinel ${{ needs.set_version.outputs.build_version }}
+
+          ${WARNING}
 
           ### Commits
 
