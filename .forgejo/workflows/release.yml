@@ -211,9 +211,12 @@ jobs:
       - name: Build pacman package
         run: |
           npm run build-pacman
-          # electron-builder produce "*.pacman": rinomina con l'estensione standard Arch
+          # electron-builder (fpm) produce "*.pacman" senza pkgbase, che il registry Arch
+          # rifiuta: lo script lo aggiunge e lo ricrea con il nome standard Arch
           for f in dist/*.pacman; do
-            [ -f "$f" ] && mv "$f" "${f%.pacman}-x86_64.pkg.tar.zst"
+            [ -f "$f" ] || continue
+            scripts/fix-pacman-pkg.sh "$f" dist
+            rm -f "$f"
           done
           ls -l dist/
 
