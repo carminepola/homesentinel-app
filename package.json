@@ -79,6 +79,9 @@
       ],
       "icon": "assets/icons",
       "category": "Utility"
+    },
+    "pacman": {
+      "packageName": "homesentinel"
     }
   },
   "dependencies": {
