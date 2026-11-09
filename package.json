@@ -81,8 +81,46 @@
       "icon": "assets/icons",
       "category": "Utility"
     },
+    "rpm": {
+      "depends": [
+        "gtk3",
+        "libnotify",
+        "nss",
+        "(libXtst or libXtst6)",
+        "xdg-utils",
+        "at-spi2-core",
+        "(libuuid or libuuid1)"
+      ]
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ]
+    },
     "pacman": {
-      "packageName": "homesentinel"
+      "packageName": "homesentinel",
+      "depends": [
+        "c-ares",
+        "ffmpeg",
+        "gtk3",
+        "http-parser",
+        "libevent",
+        "libvpx",
+        "libxslt",
+        "minizip",
+        "nss",
+        "re2",
+        "snappy",
+        "libnotify",
+        "libappindicator-gtk3"
+      ]
     }
   },
   "dependencies": {

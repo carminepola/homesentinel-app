@@ -64,9 +64,19 @@ Dalla dashboard, **Verifica aggiornamenti** mostra le novità della nuova versio
 ### Fedora: repository rpm
 
 ```bash
-sudo dnf config-manager addrepo --from-repofile=https://git.devmin.it/api/packages/carmine/rpm.repo
+sudo tee /etc/yum.repos.d/homesentinel.repo <<'REPO'
+[homesentinel]
+name=HomeSentinel
+baseurl=https://git.devmin.it/api/packages/carmine/rpm
+enabled=1
+gpgcheck=0
+repo_gpgcheck=1
+gpgkey=https://git.devmin.it/api/packages/carmine/rpm/repository.key
+REPO
 sudo dnf install HomeSentinel
 ```
+
+Forgejo firma i metadati del repository, non i singoli rpm: per questo `gpgcheck=0` e `repo_gpgcheck=1`. I metadati firmati contengono lo sha256 di ogni pacchetto, quindi un rpm alterato viene comunque rifiutato. Non usare il file `rpm.repo` generato da Forgejo: imposta `gpgcheck=1` e l'installazione fallisce con "Il pacchetto non è firmato".
 
 Gli aggiornamenti arrivano con `sudo dnf upgrade` o da GNOME Software. Per installarli in automatico: `sudo dnf install dnf-automatic` e `sudo systemctl enable --now dnf-automatic.timer` (con `apply_updates = yes` in `/etc/dnf/automatic.conf`).
 
