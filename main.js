@@ -1,5 +1,7 @@
 const { app } = require("electron");
 
+// X11 (anche sotto Wayland, via XWayland): su Wayland le app non possono posizionare
+// le proprie finestre né tenerle in primo piano, e le PiP finirebbero al centro
 if (process.platform === "linux" && !process.argv.includes("--ozone-platform=x11")) {
   app.relaunch({ args: [...process.argv.slice(1), "--ozone-platform=x11"] });
   app.exit(0);

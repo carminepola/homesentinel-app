@@ -111,6 +111,44 @@ function setupIpcListeners() {
   });
 }
 
+// Sceglie il numero di colonne che rende i riquadri 16:9 il più grandi possibile
+// nello spazio disponibile (es. 5 telecamere su ultrawide → 3+2 invece di 4+1)
+function layoutCameras() {
+  const container = document.getElementById("alarm-cameras");
+  const cards = container.querySelectorAll(".alarm-camera-card");
+  const count = cards.length;
+  if (count === 0) return;
+
+  const style = getComputedStyle(container);
+  const gap = parseFloat(style.columnGap) || 0;
+  // Misura il padre: la griglia stessa ha un maxWidth impostato dal calcolo precedente
+  const parent = container.parentElement;
+  const parentStyle = getComputedStyle(parent);
+  const availWidth = parent.clientWidth - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight)
+    - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const availHeight = container.clientHeight;
+  const headerHeight = cards[0].querySelector(".alarm-camera-header")?.offsetHeight || 0;
+  const border = 2;
+
+  let best = { cols: 1, width: 0 };
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols);
+    const byWidth = (availWidth - gap * (cols - 1)) / cols;
+    const rowHeight = (availHeight - gap * (rows - 1)) / rows;
+    const byHeight = (rowHeight - headerHeight - border) * 16 / 9 + border;
+    const width = Math.floor(Math.min(byWidth, byHeight));
+    if (width > best.width) best = { cols, width };
+  }
+
+  // Spazio troppo piccolo: ripiega su una colonna scorrevole
+  const width = Math.max(best.width, 240);
+  container.style.setProperty("--cam-width", `${width}px`);
+  // Limita la larghezza così che per riga ci stiano esattamente best.cols telecamere
+  container.style.maxWidth = `${best.cols * width + (best.cols - 1) * gap + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)}px`;
+}
+
+window.addEventListener("resize", layoutCameras);
+
 function addCameraFeed(data) {
   const existingFeed = document.getElementById(`camera-feed-${data.cameraId}`);
   if (existingFeed) return;
@@ -137,6 +175,7 @@ function addCameraFeed(data) {
   const feedContainer = card.querySelector(".alarm-camera-feed");
   feedContainer.id = `camera-feed-${data.cameraId}`;
   container.appendChild(card);
+  layoutCameras();
 
   if (data.useHLS) {
     const video = document.createElement("video");

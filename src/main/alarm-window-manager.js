@@ -58,7 +58,11 @@ class AlarmWindowManager {
         x: 0,
         y: 0,
         fullscreen: true,
-        frame: false,
+        // Cornice nativa: in fullscreen non si vede, ma su X11/XWayland una finestra
+        // frameless a schermo intero risulta spostata e resta bianca (GNOME, Electron 45)
+        frame: true,
+        autoHideMenuBar: true,
+        backgroundColor: "#0a0000",
         resizable: false,
         alwaysOnTop: true,
         skipTaskbar: false,
@@ -70,6 +74,8 @@ class AlarmWindowManager {
         },
       });
       this.alarmWindow = alarmWindow;
+      // Con la cornice nativa la barra del menu dell'app comparirebbe premendo Alt
+      alarmWindow.removeMenu();
 
       alarmWindow.setVisibleOnAllWorkspaces(true);
       alarmWindow.setAlwaysOnTop(true, "screen-saver");
